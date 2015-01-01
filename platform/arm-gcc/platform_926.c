@@ -30,6 +30,9 @@
 #include "platform.h"
 #include "platform_926.h"
 
+/****************************************************************************
+ *
+ ****************************************************************************/
 #define VIC_BASE        0x10140000
 #define VICIRQSTATUS    (*((volatile uint32_t*) (VIC_BASE + 0x000)))
 #define VICFIQSTATUS    (*((volatile uint32_t*) (VIC_BASE + 0x004)))

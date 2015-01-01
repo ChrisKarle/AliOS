@@ -61,7 +61,7 @@ debug: $(BIN_FILE)
 #
 ##############################################################################
 C_FLAGS = -Wall -Os -mcpu=arm926ej-s
-LD_FLAGS = -Wl,-T kOS.ld -Wl,-Map=$(MAP_FILE)
+LD_FLAGS = -Wl,-T $(PROJECT).ld -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I.
 C_FILES = board.c uart.c libc_glue.c
 
