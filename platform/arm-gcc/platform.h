@@ -105,6 +105,34 @@ static inline int disableInterrupts()
 }
 
 /****************************************************************************
+ *
+ ****************************************************************************/
+static inline void cpuSleep()
+{
+   unsigned long junk;
+   __asm__ __volatile__("mcr p15, 0, %0, c7, c0, 4" : "=r" (junk));
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static inline unsigned long cpuID()
+{
+   unsigned long id;
+   __asm__ volatile("mrc p15, 0, %0, c0, c0, 5" : "=r" (id));
+   return id;
+}
+
+/****************************************************************************
+ * Function: irqHandler
+ *    - install an IRQ handler
+ * Arguments:
+ *    n  - IRQ number
+ *    fx - pointer to IRQ callback
+ ****************************************************************************/
+void irqHandler(uint8_t n, void (*fx)(uint8_t));
+
+/****************************************************************************
  * Function: _kernelLock
  *    - locks the kernel from within an interrupt context
  * Notes:
@@ -135,6 +163,11 @@ void kernelLock();
  *    - must be able to be called from within an interrupt context
  ****************************************************************************/
 void kernelUnlock();
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void irqHandler(unsigned char n, void (*fx)(unsigned char));
 
 /****************************************************************************
  * Function: taskSetup

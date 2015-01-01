@@ -25,150 +25,108 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
+#include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include "board.h"
-#include "kernel.h"
-#include "libc_glue.h"
-#include "mutex_test.h"
+#include "gic.h"
 #include "platform.h"
-#include "queue_test.h"
-#include "semaphore_test.h"
-#include "shell.h"
-#include "timer_test.h"
-#include "uart.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-#ifndef TIMER_BASE
-#define TIMER_BASE 0x10011000
-#endif
-#ifndef TIMER_IRQ
-#define TIMER_IRQ  34
-#endif
-#ifndef TIMER_CLK
-#define TIMER_CLK  1000000
+#ifndef ICC_BASE
+#define ICC_BASE 0x1E000100
 #endif
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define TIMER0LOAD    (*((volatile uint32_t*) (TIMER_BASE + 0x000)))
-#define TIMER0VALUE   (*((volatile uint32_t*) (TIMER_BASE + 0x004)))
-#define TIMER0CONTROL (*((volatile uint32_t*) (TIMER_BASE + 0x008)))
-#define TIMER0INTCLR  (*((volatile uint32_t*) (TIMER_BASE + 0x00C)))
-#define TIMER0RIS     (*((volatile uint32_t*) (TIMER_BASE + 0x010)))
-#define TIMER0MIS     (*((volatile uint32_t*) (TIMER_BASE + 0x014)))
-#define TIMER0BGLOAD  (*((volatile uint32_t*) (TIMER_BASE + 0x018)))
-#define TIMER1LOAD    (*((volatile uint32_t*) (TIMER_BASE + 0x020)))
-#define TIMER1VALUE   (*((volatile uint32_t*) (TIMER_BASE + 0x024)))
-#define TIMER1CONTROL (*((volatile uint32_t*) (TIMER_BASE + 0x028)))
-#define TIMER1INTCLR  (*((volatile uint32_t*) (TIMER_BASE + 0x02C)))
-#define TIMER1RIS     (*((volatile uint32_t*) (TIMER_BASE + 0x030)))
-#define TIMER1MIS     (*((volatile uint32_t*) (TIMER_BASE + 0x034)))
-#define TIMER1BGLOAD  (*((volatile uint32_t*) (TIMER_BASE + 0x038)))
-#define TIMERITCR     (*((volatile uint32_t*) (TIMER_BASE + 0xF00)))
-#define TIMERITOP     (*((volatile uint32_t*) (TIMER_BASE + 0xF04)))
+#ifndef ICD_BASE
+#define ICD_BASE 0x1E001000
+#endif
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define DYNAMIC_TICK 1
-#define TICK_FREQ    1000
-#define TICK_CLKS    (TIMER_CLK / TICK_FREQ)
-#define MAX_TICKS    (-1UL / TICK_CLKS)
+#define ICCICR   (*((volatile uint32_t*) (ICC_BASE + 0x000)))
+#define ICCPMR   (*((volatile uint32_t*) (ICC_BASE + 0x004)))
+#define ICCBPR   (*((volatile uint32_t*) (ICC_BASE + 0x008)))
+#define ICCIAR   (*((volatile uint32_t*) (ICC_BASE + 0x00C)))
+#define ICCEOIR  (*((volatile uint32_t*) (ICC_BASE + 0x010)))
+#define ICCRPR   (*((volatile uint32_t*) (ICC_BASE + 0x014)))
+#define ICCHPIR  (*((volatile uint32_t*) (ICC_BASE + 0x018)))
+#define ICCABPR  (*((volatile uint32_t*) (ICC_BASE + 0x01C)))
+#define ICCIDR   (*((volatile uint32_t*) (ICC_BASE + 0x0FC)))
 
-#if TASK_LIST
 /****************************************************************************
  *
  ****************************************************************************/
-static void taskListCmd(int argc, char* argv[])
+#define ICDDCR   (*((volatile uint32_t*) (ICD_BASE + 0x000)))
+#define ICDICTR  (*((volatile uint32_t*) (ICD_BASE + 0x004)))
+#define ICDIIDR  (*((volatile uint32_t*) (ICD_BASE + 0x008)))
+#define ICDISRn  ((volatile uint32_t*) (ICD_BASE + 0x080))
+#define ICDISERn ((volatile uint32_t*) (ICD_BASE + 0x100))
+#define ICDICERn ((volatile uint32_t*) (ICD_BASE + 0x180))
+#define ICDISPRn ((volatile uint32_t*) (ICD_BASE + 0x200))
+#define ICDICPRn ((volatile uint32_t*) (ICD_BASE + 0x280))
+#define ICDABRn  ((volatile uint32_t*) (ICD_BASE + 0x300))
+#define ICDIPRn  ((volatile uint32_t*) (ICD_BASE + 0x400))
+#define ICDIPTRn ((volatile uint32_t*) (ICD_BASE + 0x800))
+#define ICDICFRn ((volatile uint32_t*) (ICD_BASE + 0xC00))
+#define ICPPISR  (*((volatile uint32_t*) (ICD_BASE + 0xD00)))
+#define ICSPISRn ((volatile uint32_t*) (ICD_BASE + 0xD04))
+#define ICDSGIR  (*((volatile uint32_t*) (ICD_BASE + 0xF00)))
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void (*vector[64])(uint8_t) = {NULL};
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void _irqVector()
 {
-   taskList();
-}
-#endif
+   uint32_t n = ICCIAR;
 
-/****************************************************************************
- *
- ****************************************************************************/
-static const ShellCmd SHELL_CMDS[] =
-{
-#if TASK_LIST
-   {"tl", taskListCmd},
-#endif
-   {"mutex_test", mutexTestCmd},
-   {"queue_test", queueTestCmd},
-   {"semaphore_test", semaphoreTestCmd},
-   {"timer_test", timerTestCmd},
-   {NULL, NULL}
-};
+   if (n < 0x3FF)
+      vector[n](n);
 
-/****************************************************************************
- *
- ****************************************************************************/
-static void timerIRQ(unsigned char n)
-{
-   TIMER0INTCLR = 1;
-   _taskTick(TIMER0LOAD / TICK_CLKS);
-#if TASK_PREEMPTION
-   _taskPreempt(true);
-#endif
+   ICCEOIR = n;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-void taskTimer(unsigned long ticks)
+void _irqHandler(uint8_t n, void (*fx)(uint8_t), bool edge, uint8_t priority,
+                 uint8_t cpus)
 {
-#if DYNAMIC_TICK
-   if (ticks > MAX_TICKS)
-      ticks = MAX_TICKS;
+   ICDDCR = 0;
+   ICCICR = 0;
 
-   if (ticks > 0)
-   {
-      TIMER0LOAD = ticks * TICK_CLKS;
-      TIMER0CONTROL |= 0x80;
-   }
-   else
-   {
-      TIMER0CONTROL &= ~0x80;
-   }
-#endif
+   ICDICFRn[n / 16] &= ~(0x3 << (n % 16));
+
+   if (edge)
+      ICDICFRn[n / 16] |= (0x2 << (n % 16));
+
+   ICDIPRn[n / 4] &= ~(0xFF << (n % 4));
+   ICDIPRn[n / 4] |= (priority << (n % 4));
+
+   ICDIPTRn[n / 4] &= ~(0xFF << (n % 4));
+   ICDIPTRn[n / 4] |= (cpus << (n % 4));
+
+   ICDISERn[n / 32] |= (1 << (n % 32));
+
+   vector[n] = fx;
+
+   ICCPMR = 0xFFFF;
+   ICCICR = 3;
+   ICDDCR = 1;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-void taskWait()
+void irqHandler(uint8_t n, void (*fx)(uint8_t))
 {
-   cpuSleep();
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-int main()
-{
-   uartInit();
-   libcInit();
-   taskInit(TASK_LOW_PRIORITY);
-   puts("kOS on ARM");
-
-   irqHandler(TIMER_IRQ, timerIRQ);
-   TIMER0CONTROL |= 0x42;
-   TIMER0LOAD = TIMER_CLK / TICK_FREQ;
-#if !DYNAMIC_TICK
-   TIMER0CONTROL |= 0x80;
-#endif
-   enableInterrupts();
-
-   mutexTest();
-   queueTest();
-   semaphoreTest();
-   timerTest();
-
-   shellRun(SHELL_CMDS);
-
-   return 0;
+   _irqHandler(n, fx, false, 0, 1);
 }

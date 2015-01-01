@@ -13,6 +13,7 @@
 /****************************************************************************
  *
  ****************************************************************************/
+extern uint8_t __mem_base__[];
 extern uint8_t __bss_end__[];
 
 /****************************************************************************
@@ -107,7 +108,7 @@ void* _sbrk(intptr_t increment)
 
    heap += increment;
 
-   if (ptr > (uint8_t*) BOARD_MEM_SIZE)
+   if (ptr > (__mem_base__ + BOARD_MEM_SIZE))
    {
       puts("out of memory");
       return NULL;

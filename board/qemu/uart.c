@@ -29,7 +29,6 @@
 #include <stdio.h>
 #include "kernel.h"
 #include "platform.h"
-#include "platform_926.h"
 #include "uart.h"
 
 /****************************************************************************
@@ -59,7 +58,20 @@
 /****************************************************************************
  *
  ****************************************************************************/
-#define UART_BASE     0x101F1000
+#ifndef UART_BASE
+#define UART_BASE 0x10009000
+#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+#ifndef UART_IRQ
+#define UART_IRQ 37
+#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 #define UART0DR       (*((volatile uint32_t*) (UART_BASE + 0x000)))
 #define UARTRSR       (*((volatile uint32_t*) (UART_BASE + 0x004)))
 #define UARTECR       (*((volatile uint32_t*) (UART_BASE + 0x004)))
@@ -218,7 +230,7 @@ void uartInit()
    }
 
 #if (UART_TX_BUFFER_SIZE > 0) || (UART_RX_BUFFER_SIZE > 0)
-   irqHandler(12, uartIRQ);
+   irqHandler(UART_IRQ, uartIRQ);
 #if UART_RX_BUFFER_SIZE > 0
    UARTIMSC = 0x0010;
 #endif

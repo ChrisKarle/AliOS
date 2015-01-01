@@ -29,8 +29,15 @@
 ##############################################################################
 #
 ##############################################################################
+#MACHINE = versatilepb
+MACHINE = vexpress-a9
 PROJECT = AliOS
 CROSS_COMPILE = arm-none-eabi-
+
+##############################################################################
+#
+##############################################################################
+QEMU_ARGS = -M $(MACHINE) -m 128M -nographic -kernel $(BIN_FILE)
 
 ##############################################################################
 #
@@ -38,6 +45,7 @@ CROSS_COMPILE = arm-none-eabi-
 BIN_FILE = $(PROJECT).bin
 ELF_FILE = $(PROJECT).elf
 MAP_FILE = $(PROJECT).map
+LD_FILE = $(MACHINE).ld
 
 ##############################################################################
 #
@@ -51,25 +59,37 @@ all: $(BIN_FILE)
 .PHONY: run debug
 
 run: $(BIN_FILE)
-	qemu-system-arm -M versatilepb -m 128M -nographic -kernel $(BIN_FILE)
+	qemu-system-arm $(QEMU_ARGS)
 
 debug: $(BIN_FILE)
-	qemu-system-arm -M versatilepb -m 128M -nographic -s -S -kernel \
-	$(BIN_FILE)
+	qemu-system-arm $(QEMU_ARGS) -s -S
 
 ##############################################################################
 #
 ##############################################################################
-C_FLAGS = -Wall -Os -mcpu=arm926ej-s
-LD_FLAGS = -Wl,-T $(PROJECT).ld -Wl,-Map=$(MAP_FILE)
+C_FLAGS = -Wall -g
+LD_FLAGS = -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I.
 C_FILES = board.c uart.c libc_glue.c
+
+ifeq ($(MACHINE),versatilepb)
+   C_FLAGS += -mcpu=arm926ej-s -DARM926EJ_S -DTIMER_BASE=0x101E2000 \
+              -DTIMER_IRQ=4 -DUART_BASE=0x101F1000 -DUART_IRQ=12
+else ifeq ($(MACHINE),vexpress-a9)
+   C_FLAGS += -mcpu=cortex-a9 -DCORTEX_A9 -DTIMER_BASE=0x10011000 \
+              -DTIMER_IRQ=34 -DUART_BASE=0x10009000 -DUART_IRQ=37
+endif
 
 ##############################################################################
 #
 ##############################################################################
 VPATH += ../../platform/arm-gcc
-C_FILES += platform.c platform_926.c
+C_FILES += platform.c
+ifeq ($(MACHINE),versatilepb)
+   C_FILES += vic.c
+else ifeq ($(MACHINE),vexpress-a9)
+   C_FILES += gic.c
+endif
 S_FILES = platform_asm.S
 
 ##############################################################################

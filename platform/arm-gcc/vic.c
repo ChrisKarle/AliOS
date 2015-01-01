@@ -28,12 +28,18 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "platform.h"
-#include "platform_926.h"
+#include "vic.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define VIC_BASE        0x10140000
+#ifndef VIC_BASE
+#define VIC_BASE 0x10140000
+#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 #define VICIRQSTATUS    (*((volatile uint32_t*) (VIC_BASE + 0x000)))
 #define VICFIQSTATUS    (*((volatile uint32_t*) (VIC_BASE + 0x004)))
 #define VICRAWINTR      (*((volatile uint32_t*) (VIC_BASE + 0x008)))
@@ -81,7 +87,7 @@
 /****************************************************************************
  *
  ****************************************************************************/
-static void (*vector[32])(unsigned char) = {NULL};
+static void (*vector[32])(uint8_t) = {NULL};
 
 /****************************************************************************
  *
@@ -89,7 +95,7 @@ static void (*vector[32])(unsigned char) = {NULL};
 void _irqVector()
 {
    uint32_t status = VICIRQSTATUS;
-   unsigned char i = 0;
+   uint8_t i = 0;
 
    while (status)
    {
@@ -109,7 +115,7 @@ void _irqVector()
 /****************************************************************************
  *
  ****************************************************************************/
-void irqHandler(unsigned char n, void (*fx)(unsigned char))
+void irqHandler(uint8_t n, void (*fx)(uint8_t))
 {
    if (fx != NULL)
       VICINTENABLE |= 1 << n;

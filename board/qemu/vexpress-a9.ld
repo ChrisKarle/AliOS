@@ -1,6 +1,8 @@
 SECTIONS
 {
-   .text 0x10000 :
+   __mem_base__ = 0x60010000;
+
+   .text __mem_base__ :
    {
       __text__ = .;
       *(.start)
