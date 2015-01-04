@@ -28,13 +28,4 @@
 #ifndef GIC_H
 #define GIC_H
 
-#include <stdbool.h>
-#include <stdint.h>
-
-/****************************************************************************
- *
- ****************************************************************************/
-void _irqHandler(uint8_t n, void (*fx)(uint8_t), bool edge, uint8_t priority,
-                 uint8_t cpus);
-
 #endif

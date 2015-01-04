@@ -39,15 +39,18 @@
  *
  ****************************************************************************/
 extern void __taskSwitch(void** current, void* next);
-extern uint8_t __stack[];
 
 /****************************************************************************
  *
  ****************************************************************************/
 static struct
 {
-   int state;
-
+#ifdef SMP
+   unsigned int state;
+   int interrupts[SMP];
+#else
+   int interrupts[1];
+#endif
 } lock;
 
 /****************************************************************************
@@ -55,20 +58,31 @@ static struct
  ****************************************************************************/
 void _kernelLock()
 {
-   lock.state = 1;
+   lock.interrupts[cpuID()] = true;
+#ifdef SMP
+   testAndSet(&lock.state, 0, 1);
+#endif
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-void _kernelUnlock() {}
+void _kernelUnlock()
+{
+#ifdef SMP
+   lock.state = 0;
+#endif
+}
 
 /****************************************************************************
  *
  ****************************************************************************/
 void kernelLock()
 {
-   lock.state = disableInterrupts();
+   lock.interrupts[cpuID()] = disableInterrupts();
+#ifdef SMP
+   testAndSet(&lock.state, 0, 1);
+#endif
 }
 
 /****************************************************************************
@@ -76,7 +90,10 @@ void kernelLock()
  ****************************************************************************/
 void kernelUnlock()
 {
-   if (lock.state)
+#ifdef SMP
+   lock.state = 0;
+#endif
+   if (lock.interrupts[cpuID()])
       enableInterrupts();
 }
 
@@ -85,10 +102,10 @@ void kernelUnlock()
  ****************************************************************************/
 void taskSetup(Task* task, void (*fx)(void*, void*), void* arg1, void* arg2)
 {
-   uint32_t* stack = (uint32_t*) task->stack.data + task->stack.size / 4;
+   uint32_t* stack = (uint32_t*) task->stack.base + task->stack.size / 4;
 
 #if TASK_STACK_USAGE
-   memset(task->stack.data, STACK_MARKER, task->stack.size);
+   memset(task->stack.base, STACK_MARKER, task->stack.size);
 #endif
 
    stack[-1] = (uintptr_t) fx;
@@ -116,7 +133,7 @@ void taskSetup(Task* task, void (*fx)(void*, void*), void* arg1, void* arg2)
  ****************************************************************************/
 unsigned long taskStackUsage(Task* task)
 {
-   uint8_t* stack = task->stack.data;
+   uint8_t* stack = task->stack.base;
    unsigned long i = 0;
 
    while (stack[i] == STACK_MARKER)
@@ -150,17 +167,17 @@ void _taskSwitch(Task* current, Task* next)
 /****************************************************************************
  *
  ****************************************************************************/
-void _taskInit(Task* task)
+void _taskInit(Task* task, void* stackBase, unsigned long stackSize)
 {
    uint8_t* stack = NULL;
    uint8_t* sp = NULL;
 
    __asm__ __volatile__("mov %0, sp" : "=r" (sp));
 
-   task->stack.size = TASK0_STACK_SIZE;
-   task->stack.data = __stack;
+   task->stack.base = stackBase;
+   task->stack.size = stackSize;
 
-   stack = task->stack.data;
+   stack = task->stack.base;
 
    /* cannot use memset here */
    while (stack < sp)

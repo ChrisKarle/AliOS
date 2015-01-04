@@ -34,20 +34,12 @@
 /****************************************************************************
  *
  ****************************************************************************/
-#ifndef TASK0_STACK_SIZE
-#define TASK0_STACK_SIZE 512
-#endif
-
-/****************************************************************************
- *
- ****************************************************************************/
 #define STACK_MARKER '-'
 
 /****************************************************************************
  *
  ****************************************************************************/
 extern void __taskSwitch(void** current, void* next);
-extern uint8_t __stack[];
 
 /****************************************************************************
  *
@@ -95,10 +87,10 @@ void kernelUnlock()
  ****************************************************************************/
 void taskSetup(Task* task, void (*fx)(void*, void*), void* arg1, void* arg2)
 {
-   uint8_t* stack = (uint8_t*) task->stack.data + task->stack.size;
+   uint8_t* stack = (uint8_t*) task->stack.base + task->stack.size;
 
 #if TASK_STACK_USAGE
-   memset(task->stack.data, STACK_MARKER, task->stack.size);
+   memset(task->stack.base, STACK_MARKER, task->stack.size);
 #endif
 
    stack[-1] = (uint8_t) ((uintptr_t) fx >> 0);
@@ -146,7 +138,7 @@ void taskSetup(Task* task, void (*fx)(void*, void*), void* arg1, void* arg2)
  ****************************************************************************/
 unsigned long taskStackUsage(Task* task)
 {
-   uint8_t* stack = task->stack.data;
+   uint8_t* stack = task->stack.base;
    unsigned long i = 0;
 
    while (stack[i] == STACK_MARKER)
@@ -180,14 +172,14 @@ void _taskSwitch(Task* current, Task* next)
 /****************************************************************************
  *
  ****************************************************************************/
-void _taskInit(Task* task)
+void _taskInit(Task* task, void* stackBase, unsigned long stackSize)
 {
    uint8_t* stack = NULL;
 
-   task->stack.size = TASK0_STACK_SIZE;
-   task->stack.data = __stack - TASK0_STACK_SIZE + 1;
+   task->stack.base = stackBase;
+   task->stack.size = stackSize;
 
-   stack = task->stack.data;
+   stack = task->stack.base;
 
    /* cannot use memset here */
    while (stack < (uint8_t*) SP)

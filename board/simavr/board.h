@@ -47,6 +47,7 @@
 #define TASK_PREEMPTION  0
 #define TASK_LIST        1
 #define TASK_STACK_USAGE 1
+#define TASK0_STACK_SIZE 512
 
 /****************************************************************************
  *
@@ -61,7 +62,8 @@
  * Arguments:
  *    ticks - number of ticks that the kernel wants to sleep
  * Notes:
- *    - it is acceptable to wait less than requested by the kernel
+ *    - it is acceptable to sleep less than what is requested by the kernel
+ *    - always called with the kernel locked
  ****************************************************************************/
 void taskTimer(unsigned long ticks);
 
@@ -70,8 +72,8 @@ void taskTimer(unsigned long ticks);
  *    - callback from the kernel when it has nothing to do until the next
  *      interrupt or system tick
  * Notes:
- *    - useful to call processor power management feature here
+ *    - useful to call processor power management features here
+ *    - always called with the kernel UNLOCKED
  ****************************************************************************/
 void taskWait();
-
 #endif

@@ -84,7 +84,7 @@ typedef struct _Task
    struct
    {
       unsigned long size;
-      void* data;
+      void* base;
       void* ptr;
 
    } stack;
@@ -225,9 +225,14 @@ void _taskTick(unsigned long ticks);
  * Function: taskInit
  *    - initialize kernel's tasking system & "main" task
  * Arguments:
- *    priority - priority to assign to "main" task
+ *    task      - *uninitialized* task container for "main"
+ *    name      - name of "main" task
+ *    priority  - priority to assign to "main" task
+ *    stackBase - base/bottom of stack
+ *    stackSize - size of stack
  ****************************************************************************/
-void taskInit(unsigned char priority);
+void taskInit(Task* task, const char* name, unsigned char priority,
+              void* stackBase, unsigned long stackSize);
 
 /****************************************************************************
  *

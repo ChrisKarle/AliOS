@@ -54,11 +54,15 @@ static void _timerAdd(int list, Timer* timer, unsigned long ticks);
 static Task* hReady[TASK_NUM_PRIORITIES] = {NULL};
 static Task* tReady[TASK_NUM_PRIORITIES] = {NULL};
 static Task* waiting = NULL;
+#ifdef SMP
+#define current _current[cpuID()]
+static Task* _current[SMP] = {NULL};
+#else
 static Task* current = NULL;
+#endif
 #if TIMERS
 static Timer* timers[2] = {NULL, NULL};
 #endif
-static Task task0 = {NULL};
 
 #if QUEUES
 /****************************************************************************
@@ -278,22 +282,19 @@ static void taskSetReady(Task* task)
  ****************************************************************************/
 static void taskSwitch(Task* task, unsigned char state)
 {
-   if (current != task)
-   {
-      Task* tmp = NULL;
+   Task* tmp = NULL;
 
-      if (current->state == TASK_STATE_RUN)
-         taskSetReady(current);
+   if (current->state == TASK_STATE_RUN)
+      taskSetReady(current);
 
-      task->state = state;
+   task->state = state;
 
-      if (task->state == TASK_STATE_RUN)
-         task->next = NULL;
+   if (task->state == TASK_STATE_RUN)
+      task->next = NULL;
 
-      tmp = current;
-      current = task;
-      _taskSwitch(tmp, task);
-   }
+   tmp = current;
+   current = task;
+   _taskSwitch(tmp, task);
 }
 
 /****************************************************************************
@@ -399,6 +400,9 @@ static void taskCancelTimeout(Task* _task)
    {
       if (task == _task)
       {
+#ifdef SMP
+         int id;
+#endif
          if ((task->wait.timeout != -1) && (task->next != NULL) &&
              (task->next->wait.timeout != -1))
          {
@@ -409,17 +413,34 @@ static void taskCancelTimeout(Task* _task)
             previous->next = task->next;
          else
             waiting = task->next;
+#ifdef SMP
+         for (id = 0; id < SMP; id++)
+         {
+            if (task == _current[id])
+            {
+               task->state = TASK_STATE_RUN;
+               task->next = NULL;
 
+               if (id != cpuID())
+                  smpWake(id);
+
+               break;
+            }
+         }
+
+         if (id == SMP)
+            taskSetReady(task);
+#else
          if (task == current)
          {
-            current->state = TASK_STATE_RUN;
-            current->next = NULL;
+            task->state = TASK_STATE_RUN;
+            task->next = NULL;
          }
          else
          {
             taskSetReady(task);
          }
-
+#endif
          taskSetTimer(false);
          break;
       }
@@ -613,7 +634,7 @@ void taskPriority(Task* task, unsigned char priority)
 /****************************************************************************
  *
  ****************************************************************************/
-static void _taskList(Task* task)
+static void _taskList(Task* task, int cpu)
 {
    const char* state = NULL;
    const char* wait = NULL;
@@ -665,7 +686,11 @@ static void _taskList(Task* task)
          break;
    }
 
-   printf("%-10s", state);
+   if (cpu < 0)
+      printf("%-10s", state);
+   else
+      printf("%s/%-6d", state, cpu);
+
    printf("%-5u", task->priority);
 
    if (wait == NULL)
@@ -704,8 +729,16 @@ void taskList()
 
    printf("\n");
 
+#ifdef SMP
+   for (i = 0; i < SMP; i++)
+   {
+      if (_current[i]->state == TASK_STATE_RUN)
+         _taskList(_current[i], i);
+   }
+#else
    if (current->state == TASK_STATE_RUN)
-      _taskList(current);
+      _taskList(current, -1);
+#endif
 
    for (i = 0; i < TASK_NUM_PRIORITIES; i++)
    {
@@ -713,7 +746,7 @@ void taskList()
 
       while (task != NULL)
       {
-         _taskList(task);
+         _taskList(task, -1);
          task = task->next;
       }
    }
@@ -722,7 +755,7 @@ void taskList()
 
    while (task != NULL)
    {
-      _taskList(task);
+      _taskList(task, -1);
       task = task->next;
    }
 
@@ -740,10 +773,21 @@ void NORETURN taskExit()
    for (;;)
    {
       Task* task = taskNext(TASK_NUM_PRIORITIES);
-
+#ifdef SMP
+      int i;
+#endif
       if (task == NULL)
          task = waiting;
-
+#ifdef SMP
+      for (i = 0; i < SMP; i++)
+      {
+         if (task == _current[i])
+         {
+            task = NULL;
+            break;
+         }
+      }
+#endif
       if ((task != NULL) && (task != current))
       {
          _taskExit(current);
@@ -783,9 +827,28 @@ void _taskTick(unsigned long _ticks)
       if (waiting->wait.timeout <= ticks)
       {
          Task* task = waiting;
-
+#ifdef SMP
+         int id;
+#endif
          waiting = waiting->next;
+#ifdef SMP
+         for (id = 0; id < SMP; id++)
+         {
+            if (task == _current[id])
+            {
+               task->state = TASK_STATE_RUN;
+               task->next = NULL;
 
+               if (id != cpuID())
+                  smpWake(id);
+
+               break;
+            }
+         }
+
+         if (id == SMP)
+            taskSetReady(task);
+#else
          if (task == current)
          {
             task->state = TASK_STATE_RUN;
@@ -795,7 +858,7 @@ void _taskTick(unsigned long _ticks)
          {
             taskSetReady(task);
          }
-
+#endif
          ticks = 0;
       }
       else
@@ -913,18 +976,17 @@ void _taskTick(unsigned long _ticks)
 /****************************************************************************
  *
  ****************************************************************************/
-void taskInit(unsigned char priority)
+void taskInit(Task* task, const char* name, unsigned char priority,
+              void* stackBase, unsigned long stackSize)
 {
-   task0.name = "main";
-   task0.state = TASK_STATE_RUN;
-   task0.priority = priority;
-   task0.next = NULL;
+   task->name = name;
+   task->state = TASK_STATE_RUN;
+   task->priority = priority;
+   task->next = NULL;
 
-   _taskInit(&task0);
+   _taskInit(task, stackBase, stackSize);
 
-   current = &task0;
-
-   taskTimer(0);
+   current = task;
 }
 
 #if TIMERS

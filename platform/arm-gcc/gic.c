@@ -84,35 +84,59 @@ static void (*vector[64])(uint8_t) = {NULL};
 /****************************************************************************
  *
  ****************************************************************************/
-void _irqVector()
+void cpuIRQ(int cpu, uint8_t n)
 {
-   uint32_t n = ICCIAR;
-
-   ICCEOIR = n;
-
-   if (n < 0x3FF)
-      vector[n](n);
+   if (cpu < 0)
+   {
+      ICDSGIR = 0x01000000 | (n & 0x0F);
+   }
+   else
+   {
+      uint32_t cpuMask = 1 << cpu;
+      ICDSGIR = (cpuMask << 16)  | (n & 0x0F);
+   }
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-void _irqHandler(uint8_t n, void (*fx)(uint8_t), bool edge, uint8_t priority,
-                 uint8_t cpus)
+void _irqVector()
+{
+   uint32_t n = ICCIAR;
+
+   ICCEOIR = n;
+   n &= 0x000001FF;
+
+#if 1
+   /* QEMU likes to send IRQs to CPUs it shouldn't. */
+   if ((cpuID() > 0) && (n > 1))
+   {
+      puts("IRQ on wrong CPU");
+      return;
+   }
+#endif
+
+   if (vector[n] != NULL)
+      vector[n](n);
+   else
+      puts("unhandled irq");
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void irqHandler(uint8_t n, void (*fx)(uint8_t), bool edge, uint8_t cpuMask)
 {
    ICDDCR = 0;
    ICCICR = 0;
 
-   ICDICFRn[n / 16] &= ~(0x3 << (n % 16));
+   ICDICFRn[n / 16] &= ~(0x3 << ((n % 16) * 2));
 
    if (edge)
-      ICDICFRn[n / 16] |= (0x2 << (n % 16));
+      ICDICFRn[n / 16] |= (0x2 << ((n % 16) * 2));
 
-   ICDIPRn[n / 4] &= ~(0xFF << (n % 4));
-   ICDIPRn[n / 4] |= (priority << (n % 4));
-
-   ICDIPTRn[n / 4] &= ~(0xFF << (n % 4));
-   ICDIPTRn[n / 4] |= (cpus << (n % 4));
+   ICDIPTRn[n / 4] &= ~(0xFF << ((n % 4) * 8));
+   ICDIPTRn[n / 4] |= (cpuMask << ((n % 4) * 8));
 
    ICDISERn[n / 32] |= (1 << (n % 32));
 
@@ -126,7 +150,27 @@ void _irqHandler(uint8_t n, void (*fx)(uint8_t), bool edge, uint8_t priority,
 /****************************************************************************
  *
  ****************************************************************************/
-void irqHandler(uint8_t n, void (*fx)(uint8_t))
+void irqInit()
 {
-   _irqHandler(n, fx, false, 0, 1);
+   if (cpuID() > 0)
+   {
+      ICCICR = 1;
+      ICCEOIR = ICCIAR;
+   }
+   else
+   {
+      int i;
+
+      for (i = 0; i < (64 / 16); i++)
+         ICDICFRn[i] = 0x00000000;
+
+      for (i = 0; i < (64 / 4); i++)
+         ICDIPRn[i] = 0x00000000;
+
+      for (i = 0; i < (64 / 4); i++)
+         ICDIPTRn[i] = 0x01010101;
+
+      for (i = 0; i < (64 / 32); i++)
+         ICDICERn[i] = 0xFFFFFFFF;
+   }
 }

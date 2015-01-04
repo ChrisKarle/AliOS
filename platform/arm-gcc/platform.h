@@ -44,10 +44,6 @@
 #define FIQ_STACK_SIZE 1024
 #endif
 
-#ifndef TASK0_STACK_SIZE
-#define TASK0_STACK_SIZE 2048
-#endif
-
 /****************************************************************************
  *
  ****************************************************************************/
@@ -65,22 +61,22 @@
 /****************************************************************************
  *
  ****************************************************************************/
+#include <stdbool.h>
 #include "kernel.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define INTERRUPT __attribute__((interrupt))
-#define NORETURN  __attribute__((noreturn))
+#define NORETURN __attribute__((noreturn))
 
 /****************************************************************************
  *
  ****************************************************************************/
-static inline int interruptsEnabled()
+static inline bool interruptsEnabled()
 {
    uint32_t cpsr;
    __asm__ __volatile__("mrs %0, CPSR" : "=r" (cpsr));
-   return (cpsr & CPU_I_BIT) ? 0 : 1;
+   return (cpsr & CPU_I_BIT) ? false : true;
 }
 
 /****************************************************************************
@@ -96,12 +92,12 @@ static inline void enableInterrupts()
 /****************************************************************************
  *
  ****************************************************************************/
-static inline int disableInterrupts()
+static inline bool disableInterrupts()
 {
-   unsigned long cpsr;
+   uint32_t cpsr;
    __asm__ __volatile__("mrs %0, CPSR" : "=r" (cpsr));
    __asm__ __volatile__("msr CPSR, %0" : : "r" (cpsr | CPU_I_BIT));
-   return (cpsr & CPU_I_BIT) ? 0 : 1;
+   return (cpsr & CPU_I_BIT) ? false : true;
 }
 
 /****************************************************************************
@@ -109,28 +105,69 @@ static inline int disableInterrupts()
  ****************************************************************************/
 static inline void cpuSleep()
 {
-   unsigned long junk;
-   __asm__ __volatile__("mcr p15, 0, %0, c7, c0, 4" : "=r" (junk));
+#ifdef SMP
+   __asm__ __volatile__("wfi");
+#else
+   uint32_t unused;
+   __asm__ __volatile__("mcr p15, 0, %0, c7, c0, 4" : "=r" (unused));
+#endif
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static inline unsigned long cpuID()
+static inline int cpuID()
 {
-   unsigned long id;
+#ifdef SMP
+   int id;
    __asm__ volatile("mrc p15, 0, %0, c0, c0, 5" : "=r" (id));
-   return id;
+   return (id & 3);
+#else
+   return 0;
+#endif
 }
+
+#ifdef SMP
+/****************************************************************************
+ * Function: cpuIRQ
+ *    - send interrupt to other CPUs
+ * Arguments:
+ *    cpu - CPU id to interrupt (-1 == all CPUs (excluding current))
+ *    n   - interrupt ID
+ ****************************************************************************/
+void cpuIRQ(int cpu, uint8_t n);
+
+/****************************************************************************
+ * Function: testAndSet
+ *    - perform an atomic test and set
+ * Arguments:
+ *    ptr - pointer to value to update
+ *    a   - expected value
+ *    b   - new value
+ ****************************************************************************/
+void testAndSet(unsigned int* ptr, unsigned int a, unsigned int b);
+#endif
 
 /****************************************************************************
  * Function: irqHandler
  *    - install an IRQ handler
  * Arguments:
- *    n  - IRQ number
- *    fx - pointer to IRQ callback
+ *    n       - IRQ number
+ *    fx      - pointer to IRQ callback
+ *    edge    - true if edge, false if level sensitive (if supported)
+ *    cpuMask - which processor(s) should receive this interrupt
+ *              0b00000001 -> CPU 0
+ *              0b00000010 -> CPU 1
+ *              etc...
+ *              (if supported)
  ****************************************************************************/
-void irqHandler(uint8_t n, void (*fx)(uint8_t));
+void irqHandler(uint8_t n, void (*fx)(uint8_t), bool edge, uint8_t cpuMask);
+
+/****************************************************************************
+ * Function: irqInit
+ *    - initialize IRQs
+ ****************************************************************************/
+void irqInit();
 
 /****************************************************************************
  * Function: _kernelLock
@@ -163,11 +200,6 @@ void kernelLock();
  *    - must be able to be called from within an interrupt context
  ****************************************************************************/
 void kernelUnlock();
-
-/****************************************************************************
- *
- ****************************************************************************/
-void irqHandler(unsigned char n, void (*fx)(unsigned char));
 
 /****************************************************************************
  * Function: taskSetup
@@ -229,9 +261,10 @@ void _taskSwitch(Task* current, Task* next);
  * Function: _taskInit
  *    - initialize platform task stuff and "main" task
  * Arguments:
- *    task - task container for "main" task
+ *    task      - task container for "main" task
+ *    stackBase - base/bottom of stack
+ *    stackSize - size of stack
  ****************************************************************************/
-void _taskInit(Task* task);
+void _taskInit(Task* task, void* stackBase, unsigned long stackSize);
 #endif
-
 #endif

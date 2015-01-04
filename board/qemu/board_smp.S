@@ -25,72 +25,82 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#ifndef BOARD_H
-#define BOARD_H
-
-/****************************************************************************
- *
- ****************************************************************************/
-#define BOARD_MEM_SIZE (128 * 1024 * 1024)
-
-/****************************************************************************
- *
- ****************************************************************************/
-#define MUTEX_TEST1_STACK_SIZE     2048
-#define MUTEX_TEST2_STACK_SIZE     2048
-#define QUEUE_TEST1_STACK_SIZE     2048
-#define QUEUE_TEST2_STACK_SIZE     2048
-#define SEMAPHORE_TEST1_STACK_SIZE 2048
-#define SEMAPHORE_TEST2_STACK_SIZE 2048
-#define SEMAPHORE_TEST3_STACK_SIZE 2048
-#define TIMER_TEST1_STACK_SIZE     2048
-#define TIMER_TEST2_STACK_SIZE     2048
-
-/****************************************************************************
- * Note: Task preemption is rarely needed.
- ****************************************************************************/
-#define TASK_PREEMPTION  0
-#define TASK_LIST        1
-#define TASK_STACK_USAGE 1
-#define TASK0_STACK_SIZE 2048
-
-/****************************************************************************
- *
- ****************************************************************************/
-#define TASK_HIGH_PRIORITY  0
-#define TASK_LOW_PRIORITY   1
-#define TASK_NUM_PRIORITIES 2
-
-#ifndef __ASM__
-/****************************************************************************
- * Function: taskTimer
- *    - callback from the kernel to schedule the next system tick
- * Arguments:
- *    ticks - number of ticks that the kernel wants to sleep
- * Notes:
- *    - it is acceptable to sleep less than what is requested by the kernel
- *    - always called with the kernel locked
- ****************************************************************************/
-void taskTimer(unsigned long ticks);
-
-/****************************************************************************
- * Function: taskWait
- *    - callback from the kernel when it has nothing to do until the next
- *      interrupt or system tick
- * Notes:
- *    - useful to call processor power management features here
- *    - always called with the kernel UNLOCKED
- ****************************************************************************/
-void taskWait();
+#include "platform.h"
 
 #ifdef SMP
 /****************************************************************************
- * Function: smpWake
- *    - callback from the kernel when it needs to wake a CPU
- * Arguments:
- *    cpu - CPU to wake
+ *
  ****************************************************************************/
-void smpWake(int cpu);
-#endif
-#endif
+   .bss
+   .p2align 2
+__abort_stack:
+   .skip (SMP - 1) * ABORT_STACK_SIZE
+__fiq_stack:
+   .skip (SMP - 1) * FIQ_STACK_SIZE
+__stack:
+   .skip (SMP - 1) * TASK0_STACK_SIZE
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+   .text
+   .p2align 2
+   .global smpInit
+smpInit:
+   push {lr}
+   ldr r0, =_smpInit
+   ldr r1, =0x10000030
+   str r0, [r1]
+   ldr r0, =-1
+   bl cpuIRQ
+   pop {pc}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+   .text
+   .p2align 2
+_smpInit:
+   mrc p15, 0, r0, c0, c0, 5
+   and r0, #3
+   cmp r0, #SMP
+   bge _halt
+   ldr r1, =ABORT_STACK_SIZE
+   mul r1, r0
+   ldr sp, =__abort_stack
+   add sp, r1
+
+   msr CPSR, #(CPU_I_BIT | CPU_F_BIT | CPU_MODE_UNDEFINED)
+   mov sp, r1
+
+   msr CPSR, #(CPU_I_BIT | CPU_F_BIT | CPU_MODE_ABORT)
+   mov sp, r1
+
+   msr CPSR, #(CPU_I_BIT | CPU_F_BIT | CPU_MODE_IRQ)
+   ldr sp, =0
+
+   msr CPSR, #(CPU_I_BIT | CPU_F_BIT | CPU_MODE_FIQ)
+   ldr r1, =FIQ_STACK_SIZE
+   mul r1, r0
+   ldr sp, =__fiq_stack
+   add sp, r1
+
+   msr CPSR, #(CPU_I_BIT | CPU_MODE_SUPERVISOR)
+   ldr r1, =TASK0_STACK_SIZE
+   mul r2, r1, r0
+   ldr r0, =__stack
+   add sp, r0, r2
+   bl smpMain
+   bl taskExit
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+   .text
+   .p2align 2
+   .weak smpMain
+smpMain:
+_halt:
+   wfi
+   b _halt
 #endif

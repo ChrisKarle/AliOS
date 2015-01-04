@@ -104,7 +104,7 @@ static unsigned long rxTimeout = -1;
 /****************************************************************************
  *
  ****************************************************************************/
-static void uartIRQ(unsigned char n)
+static void uartIRQ(uint8_t n)
 {
    uint8_t c;
 
@@ -230,7 +230,7 @@ void uartInit()
    }
 
 #if (UART_TX_BUFFER_SIZE > 0) || (UART_RX_BUFFER_SIZE > 0)
-   irqHandler(UART_IRQ, uartIRQ);
+   irqHandler(UART_IRQ, uartIRQ, false, 1 << cpuID());
 #if UART_RX_BUFFER_SIZE > 0
    UARTIMSC = 0x0010;
 #endif

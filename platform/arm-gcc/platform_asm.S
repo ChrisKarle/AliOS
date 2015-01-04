@@ -27,12 +27,28 @@
  ****************************************************************************/
 #include "platform.h"
 
+#ifdef SMP
+/****************************************************************************
+ *
+ ****************************************************************************/
+   .text
+   .p2align 2
+   .global testAndSet
+testAndSet:
+   ldrex r3, [r0]
+   cmp r3, r1
+   ldr r3, =1
+   strexeq r3, r2, [r0]
+   cmp r3, #0
+   bne testAndSet
+   bx lr
+#endif
+
 /****************************************************************************
  *
  ****************************************************************************/
    .bss
    .p2align 2
-   .global __stack
 __abort_stack:
    .skip ABORT_STACK_SIZE
 __fiq_stack:
@@ -215,5 +231,7 @@ _start:
    ldr r2, =__vector_table_end__ - __vector_table
    bl memcpy
 
+   ldr r0, =__stack
+   ldr r1, =TASK0_STACK_SIZE
    bl main
-   b .
+   bl taskExit

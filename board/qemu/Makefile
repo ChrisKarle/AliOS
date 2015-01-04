@@ -38,6 +38,9 @@ CROSS_COMPILE = arm-none-eabi-
 #
 ##############################################################################
 QEMU_ARGS = -M $(MACHINE) -m 128M -nographic -kernel $(BIN_FILE)
+ifeq ($(MACHINE),vexpress-a9)
+   QEMU_ARGS += -smp 2
+endif
 
 ##############################################################################
 #
@@ -67,17 +70,19 @@ debug: $(BIN_FILE)
 ##############################################################################
 #
 ##############################################################################
-C_FLAGS = -Wall -Os
+C_FLAGS = -Wall -Wno-main -Os
 LD_FLAGS = -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I.
 C_FILES = board.c uart.c libc_glue.c
+S_FILES =
 
 ifeq ($(MACHINE),versatilepb)
-   C_FLAGS += -mcpu=arm926ej-s -DARM926EJ_S -DTIMER_BASE=0x101E2000 \
-              -DTIMER_IRQ=4 -DUART_BASE=0x101F1000 -DUART_IRQ=12
+   C_FLAGS += -mcpu=arm926ej-s -DTIMER_BASE=0x101E2000 -DTIMER_IRQ=4 \
+              -DUART_BASE=0x101F1000 -DUART_IRQ=12
 else ifeq ($(MACHINE),vexpress-a9)
-   C_FLAGS += -mcpu=cortex-a9 -DCORTEX_A9 -DTIMER_BASE=0x10011000 \
-              -DTIMER_IRQ=34 -DUART_BASE=0x10009000 -DUART_IRQ=37
+   C_FLAGS += -mcpu=cortex-a9 -DTIMER_BASE=0x10011000 -DTIMER_IRQ=34 \
+              -DUART_BASE=0x10009000 -DUART_IRQ=37 -DSMP=2
+   S_FILES += board_smp.S
 endif
 
 ##############################################################################
@@ -90,7 +95,7 @@ ifeq ($(MACHINE),versatilepb)
 else ifeq ($(MACHINE),vexpress-a9)
    C_FILES += gic.c
 endif
-S_FILES = platform_asm.S
+S_FILES += platform_asm.S
 
 ##############################################################################
 #

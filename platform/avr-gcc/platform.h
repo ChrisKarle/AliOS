@@ -130,8 +130,9 @@ void _taskSwitch(Task* current, Task* next);
  * Function: _taskInit
  *    - initialize platform task stuff and "main" task
  * Arguments:
- *    task - task container for "main" task
+ *    task      - task container for "main" task
+ *    stackBase - base/bottom of stack
+ *    stackSize - size of stack
  ****************************************************************************/
-void _taskInit(Task* task);
-
+void _taskInit(Task* task, void* stackBase, unsigned long stackSize);
 #endif

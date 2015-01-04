@@ -74,10 +74,32 @@
 /****************************************************************************
  *
  ****************************************************************************/
+#ifdef SMP
+/* timer0 for qemu vexpress-a9 does not appear to be global */
+#define DYNAMIC_TICK 0
+#else
 #define DYNAMIC_TICK 1
+#endif
 #define TICK_FREQ    1000
 #define TICK_CLKS    (TIMER_CLK / TICK_FREQ)
 #define MAX_TICKS    (-1UL / TICK_CLKS)
+
+#ifdef SMP
+/****************************************************************************
+ *
+ ****************************************************************************/
+static Task task[SMP];
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void smpInit();
+#else
+/****************************************************************************
+ *
+ ****************************************************************************/
+static Task task[1];
+#endif
 
 #if TASK_LIST
 /****************************************************************************
@@ -112,6 +134,9 @@ static void timerIRQ(unsigned char n)
    TIMER0INTCLR = 1;
    _taskTick(TIMER0LOAD / TICK_CLKS);
 #if TASK_PREEMPTION
+#ifdef SMP
+   cpuIRQ(-1, 1);
+#endif
    _taskPreempt(true);
 #endif
 }
@@ -145,22 +170,61 @@ void taskWait()
    cpuSleep();
 }
 
+#ifdef SMP
 /****************************************************************************
  *
  ****************************************************************************/
-int main()
+void smpIRQ(uint8_t n)
 {
+   if (n > 0)
+      _taskPreempt(true);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void smpWake(int cpu)
+{
+   cpuIRQ(cpu, 0);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void smpMain(void* stack, unsigned long size)
+{
+   irqInit();
+   taskInit(&task[cpuID()], "main+", TASK_LOW_PRIORITY, stack, size);
+   enableInterrupts();
+
+   for (;;)
+      taskSleep(1000);
+}
+#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+int main(void* stack, unsigned long size)
+{
+   irqInit();
    uartInit();
    libcInit();
-   taskInit(TASK_LOW_PRIORITY);
+   taskInit(&task[0], "main", TASK_LOW_PRIORITY, stack, size);
+#ifdef SMP
+   irqHandler(0, smpIRQ, true, 0xFF);
+   irqHandler(1, smpIRQ, true, 0xFF);
+   smpInit();
+#endif
    puts("kOS on ARM");
 
-   irqHandler(TIMER_IRQ, timerIRQ);
+   irqHandler(TIMER_IRQ, timerIRQ, true, 0x01);
    TIMER0CONTROL |= 0x42;
    TIMER0LOAD = TIMER_CLK / TICK_FREQ;
 #if !DYNAMIC_TICK
    TIMER0CONTROL |= 0x80;
 #endif
+
    enableInterrupts();
 
    mutexTest();
