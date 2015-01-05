@@ -67,7 +67,7 @@ debug: $(BIN_FILE)
 ##############################################################################
 #
 ##############################################################################
-C_FLAGS = -Wall -g
+C_FLAGS = -Wall -Os
 LD_FLAGS = -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I.
 C_FILES = board.c uart.c libc_glue.c

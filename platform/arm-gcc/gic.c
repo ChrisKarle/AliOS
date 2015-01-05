@@ -88,10 +88,10 @@ void _irqVector()
 {
    uint32_t n = ICCIAR;
 
+   ICCEOIR = n;
+
    if (n < 0x3FF)
       vector[n](n);
-
-   ICCEOIR = n;
 }
 
 /****************************************************************************
