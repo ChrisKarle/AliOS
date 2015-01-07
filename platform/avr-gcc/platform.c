@@ -26,7 +26,6 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
 #include <avr/interrupt.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 #include "board.h"
@@ -55,8 +54,7 @@ extern uint8_t __stack[];
  ****************************************************************************/
 static struct
 {
-   unsigned int count;
-   bool interrupts;
+   int state;
 
 } lock;
 
@@ -65,18 +63,13 @@ static struct
  ****************************************************************************/
 void _kernelLock()
 {
-   if (lock.count++ == 0)
-      lock.interrupts = true;
+   lock.state = 1;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-void _kernelUnlock()
-{
-   if (lock.count > 0)
-      lock.count--;
-}
+void _kernelUnlock() {}
 
 /****************************************************************************
  *
@@ -84,11 +77,8 @@ void _kernelUnlock()
 void kernelLock()
 {
    uint8_t sreg = SREG;
-
    cli();
-
-   if (lock.count++ == 0)
-      lock.interrupts = sreg & 0x80;
+   lock.state = sreg & 0x80;
 }
 
 /****************************************************************************
@@ -96,12 +86,7 @@ void kernelLock()
  ****************************************************************************/
 void kernelUnlock()
 {
-   if (lock.count > 0)
-      lock.count--;
-   else
-      return;
-
-   if ((lock.count == 0) && lock.interrupts)
+   if (lock.state)
       sei();
 }
 

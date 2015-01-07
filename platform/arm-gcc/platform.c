@@ -46,8 +46,7 @@ extern uint8_t __stack[];
  ****************************************************************************/
 static struct
 {
-   unsigned int count;
-   int interrupts;
+   int state;
 
 } lock;
 
@@ -56,28 +55,20 @@ static struct
  ****************************************************************************/
 void _kernelLock()
 {
-   if (lock.count++ == 0)
-      lock.interrupts = true;
+   lock.state = 1;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-void _kernelUnlock()
-{
-   if (lock.count > 0)
-      lock.count--;
-}
+void _kernelUnlock() {}
 
 /****************************************************************************
  *
  ****************************************************************************/
 void kernelLock()
 {
-   int state = disableInterrupts();
-
-   if (lock.count++ == 0)
-      lock.interrupts = state;
+   lock.state = disableInterrupts();
 }
 
 /****************************************************************************
@@ -85,12 +76,7 @@ void kernelLock()
  ****************************************************************************/
 void kernelUnlock()
 {
-   if (lock.count > 0)
-      lock.count--;
-   else
-      return;
-
-   if ((lock.count == 0) && lock.interrupts)
+   if (lock.state)
       enableInterrupts();
 }
 
