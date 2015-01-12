@@ -5,6 +5,7 @@ embedded devices.
 
    - BSD license (your changes are yours)
    - supports dynamic ticks for low power applications
+   - SMP (multicore) support
    - very minimal ROM and RAM requirements
    - simple/clean/documented API
    - does not need dynamic memory
@@ -18,5 +19,4 @@ Ports for the following are available.
 Future Work...
 
    - More ports (Renesas RL & RX)
-   - SMP (multicore)
    - Port lwIP
