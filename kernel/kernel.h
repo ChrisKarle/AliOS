@@ -578,5 +578,4 @@ bool mutexLock(Mutex* mutex, unsigned long ticks);
  ****************************************************************************/
 void mutexUnlock(Mutex* mutex);
 #endif
-
 #endif

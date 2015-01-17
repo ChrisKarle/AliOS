@@ -70,7 +70,6 @@ __taskSwitch:
    in       r0, SREG
    push     r0
 
-   cli
    movw     r26, r24
    in       r18, SPL
    in       r19, SPH

@@ -29,12 +29,12 @@
 #define BOARD_H
 
 /****************************************************************************
- *
+ * see QEMU_ARGS in Makefile before changing
  ****************************************************************************/
 #define BOARD_MEM_SIZE (128 * 1024 * 1024)
 
 /****************************************************************************
- *
+ * stack size defines for various testing
  ****************************************************************************/
 #define MUTEX_TEST1_STACK_SIZE     2048
 #define MUTEX_TEST2_STACK_SIZE     2048
@@ -55,7 +55,7 @@
 #define TASK0_STACK_SIZE 2048
 
 /****************************************************************************
- *
+ * For our demonstration purposes, 2 priorities are enough.
  ****************************************************************************/
 #define TASK_HIGH_PRIORITY  0
 #define TASK_LOW_PRIORITY   1
@@ -89,6 +89,10 @@ void taskWait();
  *    - callback from the kernel when it needs to wake a CPU
  * Arguments:
  *    cpu - CPU to wake
+ * Notes:
+ *    - This is to bring a CPU out of its (potential) sleep state.  If the
+ *      taskWait() function doesn't put the processor into a low power state,
+ *      then this function can be an empty stub.
  ****************************************************************************/
 void smpWake(int cpu);
 #endif
