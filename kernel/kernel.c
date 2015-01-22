@@ -55,9 +55,12 @@ static Task* hReady[TASK_NUM_PRIORITIES] = {NULL};
 static Task* tReady[TASK_NUM_PRIORITIES] = {NULL};
 static Task* waiting = NULL;
 #ifdef SMP
+#define _previous __previous[cpuID()]
 #define current _current[cpuID()]
+static Task* __previous[SMP] = {NULL};
 static Task* _current[SMP] = {NULL};
 #else
+static Task* _previous = NULL;
 static Task* current = NULL;
 #endif
 #if TIMERS
@@ -282,8 +285,6 @@ static void taskSetReady(Task* task)
  ****************************************************************************/
 static void taskSwitch(Task* task, unsigned char state)
 {
-   Task* tmp = NULL;
-
    if (current->state == TASK_STATE_RUN)
       taskSetReady(current);
 
@@ -292,9 +293,21 @@ static void taskSwitch(Task* task, unsigned char state)
    if (task->state == TASK_STATE_RUN)
       task->next = NULL;
 
-   tmp = current;
+   _previous = current;
    current = task;
-   _taskSwitch(tmp, task);
+   _taskSwitch(_previous, task);
+
+   if (_previous->state == TASK_STATE_END)
+   {
+      _taskExit(_previous);
+
+      if (_previous->flags & (TASK_FLAG_ALLOC | TASK_FLAG_FREE_ON_EXIT))
+      {
+         kfree(_previous->stack.base);
+         kfree(_previous);
+         _previous = NULL;
+      }
+   }
 }
 
 /****************************************************************************
@@ -450,79 +463,33 @@ static void taskCancelTimeout(Task* _task)
    }
 }
 
+#ifdef kmalloc
 /****************************************************************************
  *
  ****************************************************************************/
-static void _taskPriority(Task* task, unsigned char priority)
+Task* taskCreate(const char* name, unsigned long stackSize, bool freeOnExit)
 {
-   if (task == NULL)
-      task = current;
+   Task* task = kmalloc(sizeof(Task));
 
-   switch (task->state)
-   {
-      case TASK_STATE_READY:
-      {
-         Task* previous = NULL;
-         Task* _task = hReady[task->priority];
+   task->name = name;
+   task->state = TASK_STATE_END;
+   task->priority = 0;
+   task->flags = TASK_FLAG_ALLOC;
+   task->wait.type = NULL;
+   task->wait.timeout = 0;
+   task->wait.ptr = NULL;
+   task->wait.next = NULL;
+   task->stack.size = stackSize;
+   task->stack.base = kmalloc(stackSize);
+   task->stack.ptr = NULL;
+   task->next = NULL;
 
-         while (_task != NULL)
-         {
-            if (_task == task)
-            {
-               if (previous != NULL)
-               {
-                  previous->next = task->next;
+   if (freeOnExit)
+      task->flags |= TASK_FLAG_FREE_ON_EXIT;
 
-                  if (task->next == NULL)
-                     tReady[task->priority] = previous;
-               }
-               else
-               {
-                  hReady[task->priority] = task->next;
-               }
-
-               task->priority = priority;
-               taskSetReady(task);
-               break;
-            }
-
-            previous = _task;
-            _task = _task->next;
-         }
-
-         break;
-      }
-
-      case TASK_STATE_RUN:
-      case TASK_STATE_SLEEP:
-         task->priority = priority;
-         break;
-
-#if QUEUES
-      case TASK_STATE_QUEUE:
-         task->priority = priority;
-         queueDelWait(task->wait.type, task);
-         queueAddWait(task->wait.type, task);
-         break;
-#endif
-
-#if SEMAPHORES
-      case TASK_STATE_SEMAPHORE:
-         task->priority = priority;
-         semaphoreDelWait(task->wait.type, task);
-         semaphoreAddWait(task->wait.type, task);
-         break;
-#endif
-
-#if MUTEXES
-      case TASK_STATE_MUTEX:
-         task->priority = priority;
-         mutexDelWait(task->wait.type, task);
-         mutexAddWait(task->wait.type, task);
-         break;
-#endif
-   }
+   return task;
 }
+#endif
 
 /****************************************************************************
  *
@@ -611,6 +578,80 @@ void taskSleep(unsigned long ticks)
    kernelLock();
    taskTimeout(TASK_STATE_SLEEP, ticks);
    kernelUnlock();
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void _taskPriority(Task* task, unsigned char priority)
+{
+   if (task == NULL)
+      task = current;
+
+   switch (task->state)
+   {
+      case TASK_STATE_READY:
+      {
+         Task* previous = NULL;
+         Task* _task = hReady[task->priority];
+
+         while (_task != NULL)
+         {
+            if (_task == task)
+            {
+               if (previous != NULL)
+               {
+                  previous->next = task->next;
+
+                  if (task->next == NULL)
+                     tReady[task->priority] = previous;
+               }
+               else
+               {
+                  hReady[task->priority] = task->next;
+               }
+
+               task->priority = priority;
+               taskSetReady(task);
+               break;
+            }
+
+            previous = _task;
+            _task = _task->next;
+         }
+
+         break;
+      }
+
+      case TASK_STATE_RUN:
+      case TASK_STATE_SLEEP:
+         task->priority = priority;
+         break;
+
+#if QUEUES
+      case TASK_STATE_QUEUE:
+         task->priority = priority;
+         queueDelWait(task->wait.type, task);
+         queueAddWait(task->wait.type, task);
+         break;
+#endif
+
+#if SEMAPHORES
+      case TASK_STATE_SEMAPHORE:
+         task->priority = priority;
+         semaphoreDelWait(task->wait.type, task);
+         semaphoreAddWait(task->wait.type, task);
+         break;
+#endif
+
+#if MUTEXES
+      case TASK_STATE_MUTEX:
+         task->priority = priority;
+         mutexDelWait(task->wait.type, task);
+         mutexAddWait(task->wait.type, task);
+         break;
+#endif
+   }
 }
 
 /****************************************************************************
@@ -790,7 +831,6 @@ void NORETURN taskExit()
 #endif
       if ((task != NULL) && (task != current))
       {
-         _taskExit(current);
          current->state = TASK_STATE_END;
 
          if (task->state == TASK_STATE_READY)

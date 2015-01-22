@@ -47,6 +47,7 @@
    name,                                       \
    TASK_STATE_END,                             \
    0,                                          \
+   0,                                          \
    {},                                         \
    {stackSize, (uint8_t[stackSize]) {}, NULL}, \
    NULL                                        \
@@ -66,11 +67,18 @@
 /****************************************************************************
  *
  ****************************************************************************/
+#define TASK_FLAG_ALLOC        0x01
+#define TASK_FLAG_FREE_ON_EXIT 0x02
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 typedef struct _Task
 {
    const char* name;
    unsigned char state;
    unsigned char priority;
+   unsigned short flags;
 
    struct
    {
@@ -92,6 +100,22 @@ typedef struct _Task
    struct _Task* next;
 
 } Task;
+
+#ifdef kmalloc
+/****************************************************************************
+ * Function: taskCreate
+ *    - dynamically create a new task container
+ * Arguments:
+ *    name       - task container to use
+ *    stackSize  - pointer to task function
+ *    freeOnExit - free on task container on task exit
+ * Returns:
+ *    - pointer to initialized task container
+ * Notes:
+ *    - must be destroyed with taskDestroy
+ ****************************************************************************/
+Task* taskCreate(const char* name, unsigned long stackSize, bool freeOnExit);
+#endif
 
 /****************************************************************************
  * Function: _taskStart

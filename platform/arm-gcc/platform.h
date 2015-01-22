@@ -240,11 +240,11 @@ void _taskEntry(Task* task);
 
 /****************************************************************************
  * Function: _taskExit
- *    - callback before task is context switched away from for the last time
+ *    - callback after a task has exited
  * Arguments:
- *    task - task about to exit
+ *    task - task that exited
  * Notes:
- *    - the task is "technically" still executing
+ *    - the resources associated with the task are no longer in use
  ****************************************************************************/
 void _taskExit(Task* task);
 

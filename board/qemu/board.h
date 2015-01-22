@@ -63,6 +63,13 @@
 
 #ifndef __ASM__
 /****************************************************************************
+ * allow the kernel to use malloc
+ ****************************************************************************/
+#define kmalloc malloc
+#define kfree   free
+#include <stdlib.h>
+
+/****************************************************************************
  * Function: taskTimer
  *    - callback from the kernel to schedule the next system tick
  * Arguments:
