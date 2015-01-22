@@ -25,259 +25,293 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#ifndef PLATFORM_H
-#define PLATFORM_H
+#include "lwip/sys.h"
+#include "sys_arch.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-#include "board.h"
-
-/****************************************************************************
- *
- ****************************************************************************/
-#define BYTE_ORDER LITTLE_ENDIAN
-
-/****************************************************************************
- *
- ****************************************************************************/
-#ifndef ABORT_STACK_SIZE
-#define ABORT_STACK_SIZE 1024
-#endif
-
-#ifndef FIQ_STACK_SIZE
-#define FIQ_STACK_SIZE 1024
+#ifndef LWIP_TICKS
+#define LWIP_TICKS (TASK_TICK_HZ / 100)
 #endif
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define CPU_MODE_USER       0x10
-#define CPU_MODE_FIQ        0x11
-#define CPU_MODE_IRQ        0x12
-#define CPU_MODE_SUPERVISOR 0x13
-#define CPU_MODE_ABORT      0x17
-#define CPU_MODE_UNDEFINED  0x1B
-#define CPU_MODE_SYSTEM     0x1F
-#define CPU_F_BIT           0x40
-#define CPU_I_BIT           0x80
-
-#ifndef __ASM__
-/****************************************************************************
- *
- ****************************************************************************/
-#include <stdbool.h>
-#include "kernel.h"
+static Timer lwipTimer = TIMER_CREATE("net", TIMER_FLAG_ASYNC |
+                                      TIMER_FLAG_PERIODIC);
+static Mutex lwipLock = MUTEX_CREATE("net");
+static volatile u32_t lwipTicks = 0;
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define NORETURN __attribute__((noreturn))
-
-/****************************************************************************
- *
- ****************************************************************************/
-#define PACK_STRUCT_FIELD(x) x
-#define PACK_STRUCT_STRUCT __attribute__((packed))
-#define PACK_STRUCT_BEGIN
-#define PACK_STRUCT_END
-
-/****************************************************************************
- *
- ****************************************************************************/
-static inline bool interruptsEnabled()
+static void lwipTimerFx(void* timer)
 {
-   uint32_t cpsr;
-   __asm__ __volatile__("mrs %0, CPSR" : "=r" (cpsr));
-   return (cpsr & CPU_I_BIT) ? false : true;
+   lwipTicks += LWIP_TICKS;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static inline void enableInterrupts()
+err_t sys_sem_new(sys_sem_t* sem, u8_t count)
 {
-   uint32_t cpsr;
-   __asm__ __volatile__("mrs %0, CPSR" : "=r" (cpsr));
-   __asm__ __volatile__("msr CPSR, %0" : : "r" (cpsr & ~CPU_I_BIT));
+   sem->name = "net";
+   sem->count = count;
+   sem->max = 1;
+   sem->task = NULL;
+
+   return ERR_OK;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static inline bool disableInterrupts()
+void sys_sem_free(sys_sem_t* sem) {}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void sys_sem_signal(sys_sem_t* sem)
 {
-   uint32_t cpsr;
-   __asm__ __volatile__("mrs %0, CPSR" : "=r" (cpsr));
-   __asm__ __volatile__("msr CPSR, %0" : : "r" (cpsr | CPU_I_BIT));
-   return (cpsr & CPU_I_BIT) ? false : true;
+   semaphoreGive(sem);
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static inline void cpuSleep()
+u32_t sys_arch_sem_wait(sys_sem_t* sem, u32_t timeout)
 {
-#ifdef SMP
-   __asm__ __volatile__("wfi");
-#else
-   uint32_t unused;
-   __asm__ __volatile__("mcr p15, 0, %0, c7, c0, 4" : "=r" (unused));
-#endif
+   u32_t start = lwipTicks;
+   u32_t ticks = 0;
+
+   if (timeout > 0)
+      ticks = LWIP_TICKS * timeout;
+   else
+      ticks = -1;
+
+   if (!semaphoreTake(sem, ticks))
+      return SYS_ARCH_TIMEOUT;
+
+   if (timeout > 0)
+   {
+      ticks = lwipTicks;
+
+      if (start < ticks)
+         ticks -= start;
+      else
+         ticks += -start;
+   }
+
+   return ticks;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static inline int cpuID()
+int sys_sem_valid(sys_sem_t* sem)
 {
-#ifdef SMP
-   int id;
-   __asm__ volatile("mrc p15, 0, %0, c0, c0, 5" : "=r" (id));
-   return (id & 3);
-#else
+   return (sem != NULL) && (sem->name != NULL);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void sys_sem_set_invalid(sys_sem_t* sem)
+{
+   sem->name = NULL;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+err_t sys_mbox_new(sys_mbox_t* mbox, int size)
+{
+   mbox->name = "net";
+   mbox->size = sizeof(void*);
+   mbox->max = size;
+   mbox->count = 0;
+   mbox->index = 0;
+   mbox->buffer = kmalloc(size * sizeof(void*));
+   mbox->task = NULL;
+
+   return ERR_OK;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void sys_mbox_free(sys_mbox_t* mbox)
+{
+   kfree(mbox->buffer);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void sys_mbox_post(sys_mbox_t* mbox, void* msg)
+{
+   queuePush(mbox, true, &msg, -1);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+err_t sys_mbox_trypost(sys_mbox_t* mbox, void* msg)
+{
+   if (!queuePush(mbox, true, &msg, 0))
+      return ERR_MEM;
+
+   return ERR_OK;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+u32_t sys_arch_mbox_fetch(sys_mbox_t* mbox, void** msg, u32_t timeout)
+{
+   u32_t start = lwipTicks;
+   u32_t ticks = 0;
+
+   if (timeout > 0)
+      ticks = LWIP_TICKS * timeout;
+   else
+      ticks = -1;
+
+   if (!queuePop(mbox, true, false, msg, ticks))
+      return SYS_ARCH_TIMEOUT;
+
+   if (timeout > 0)
+   {
+      ticks = lwipTicks;
+
+      if (start < ticks)
+         ticks -= start;
+      else
+         ticks += -start;
+   }
+
+   return ticks;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+u32_t sys_arch_mbox_tryfetch(sys_mbox_t* mbox, void** msg)
+{
+   if (!queuePop(mbox, true, false, msg, 0))
+      return SYS_MBOX_EMPTY;
+
    return 0;
-#endif
 }
 
-#ifdef SMP
 /****************************************************************************
- * Function: cpuIRQ
- *    - send interrupt to other CPUs
- * Arguments:
- *    cpu - CPU id to interrupt (-1 == all CPUs (excluding current))
- *    n   - interrupt ID
+ *
  ****************************************************************************/
-void cpuIRQ(int cpu, uint8_t n);
+int sys_mbox_valid(sys_mbox_t* mbox)
+{
+   return (mbox != NULL) && (mbox->name != NULL);
+}
 
 /****************************************************************************
- * Function: testAndSet
- *    - perform an atomic test and set
- * Arguments:
- *    ptr - pointer to value to update
- *    a   - expected value
- *    b   - new value
+ *
  ****************************************************************************/
-void testAndSet(unsigned int* ptr, unsigned int a, unsigned int b);
-#endif
+void sys_mbox_set_invalid(sys_mbox_t* mbox)
+{
+   mbox->name = NULL;
+}
 
 /****************************************************************************
- * Function: irqHandler
- *    - install an IRQ handler
- * Arguments:
- *    n       - IRQ number
- *    fx      - pointer to IRQ callback
- *    edge    - true if edge, false if level sensitive (if supported)
- *    cpuMask - which processor(s) should receive this interrupt
- *              0b00000001 -> CPU 0
- *              0b00000010 -> CPU 1
- *              etc...
- *              (if supported)
+ *
  ****************************************************************************/
-void irqHandler(uint8_t n, void (*fx)(uint8_t), bool edge, uint8_t cpuMask);
+err_t sys_mutex_new(sys_mutex_t* mutex)
+{
+   mutex->name = "net";
+   mutex->count = 0;
+   mutex->priority = 0;
+   mutex->owner = NULL;
+   mutex->task = NULL;
+
+   return ERR_OK;
+}
 
 /****************************************************************************
- * Function: irqInit
- *    - initialize IRQs
+ *
  ****************************************************************************/
-void irqInit();
+void sys_mutex_free(sys_mutex_t* mutex) {}
 
 /****************************************************************************
- * Function: _kernelLock
- *    - locks the kernel from within an interrupt context
- * Notes:
- *    - called by _taskTick() & _taskPreempt()
+ *
  ****************************************************************************/
-void _kernelLock();
+void sys_mutex_lock(sys_mutex_t* mutex)
+{
+   mutexLock(mutex, -1);
+}
 
 /****************************************************************************
- * Function: _kernelUnlock
- *    - unlocks the kernel from within an interrupt context
- * Notes:
- *    - called by _taskTick() & _taskPreempt()
+ *
  ****************************************************************************/
-void _kernelUnlock();
+void sys_mutex_unlock(sys_mutex_t* mutex)
+{
+   mutexUnlock(mutex);
+}
 
 /****************************************************************************
- * Function: kernelLock
- *    - locks the kernel
- * Notes:
- *    - must be able to be called from within an interrupt context
+ *
  ****************************************************************************/
-void kernelLock();
+int sys_mutex_valid(sys_mutex_t* mutex)
+{
+   return (mutex != NULL) && (mutex->name != NULL);
+}
 
 /****************************************************************************
- * Function: kernelUnlock
- *    - unlocks the kernel
- * Notes:
- *    - must be able to be called from within an interrupt context
+ *
  ****************************************************************************/
-void kernelUnlock();
+void sys_mutex_set_invalid(sys_mutex_t* mutex)
+{
+   mutex->name = NULL;
+}
 
 /****************************************************************************
- * Function: taskSetup
- *    - initialize a task for execution
- * Arguments:
- *    task - task to use
- *    fx   - pointer to task function
- *    arg1 - first argument to pass to task function
- *    arg2 - second argument to pass to task function
+ *
  ****************************************************************************/
-void taskSetup(Task* task, void (*fx)(void*, void*), void* arg1, void* arg2);
-
-#if TASK_STACK_USAGE
-/****************************************************************************
- * Function: taskStackUsage
- *    - compute the amount of stack usage for a task
- * Arguments:
- *    task - task to use
- * Returns:
- *    - number of bytes of stack in use
- * Notes:
- *    - uses a stack marker to determine the amount of stack used up to when
- *      this function is called
- ****************************************************************************/
-unsigned long taskStackUsage(Task* task);
-#endif
+sys_thread_t sys_thread_new(const char* name, void (*thread)(void* arg),
+                            void* arg, int stackSize, int priority)
+{
+   Task* task = taskCreate(name, stackSize, true);
+   taskStart(task, thread, arg, priority);
+   return task;
+}
 
 /****************************************************************************
- * Function: _taskEntry
- *    - callback before task is executed for the first time
- * Arguments:
- *    task - task about to run
- * Notes:
- *    - the task is "technically" executing but has yet to call the task
- *      function
+ *
  ****************************************************************************/
-void _taskEntry(Task* task);
+sys_prot_t sys_arch_protect()
+{
+   mutexLock(&lwipLock, -1);
+   return 0;
+}
 
 /****************************************************************************
- * Function: _taskExit
- *    - callback after a task has exited
- * Arguments:
- *    task - task that exited
- * Notes:
- *    - the resources associated with the task are no longer in use
+ *
  ****************************************************************************/
-void _taskExit(Task* task);
+void sys_arch_unprotect(sys_prot_t state)
+{
+   mutexUnlock(&lwipLock);
+}
 
 /****************************************************************************
- * Function: _taskSwitch
- *    - context switch between tasks
- * Arguments:
- *    current - current task executing
- *    next    - next task to execute
+ *
  ****************************************************************************/
-void _taskSwitch(Task* current, Task* next);
+u32_t sys_now()
+{
+   return lwipTicks;
+}
 
 /****************************************************************************
- * Function: _taskInit
- *    - initialize platform task stuff and "main" task
- * Arguments:
- *    task      - task container for "main" task
- *    stackBase - base/bottom of stack
- *    stackSize - size of stack
+ *
  ****************************************************************************/
-void _taskInit(Task* task, void* stackBase, unsigned long stackSize);
-#endif
-#endif
+void sys_init()
+{
+   timerAdd(&lwipTimer, NULL, lwipTimerFx, NULL, 0, LWIP_TICKS);
+}

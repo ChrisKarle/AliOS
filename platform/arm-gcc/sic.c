@@ -25,88 +25,73 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#ifndef BOARD_H
-#define BOARD_H
+#include <stdint.h>
+#include <stdio.h>
+#include "platform.h"
+#include "sic.h"
 
 /****************************************************************************
- * see QEMU_ARGS in Makefile before changing
+ *
  ****************************************************************************/
-#define BOARD_MEM_SIZE (128 * 1024 * 1024)
-
-/****************************************************************************
- * stack size defines for various testing
- ****************************************************************************/
-#define MUTEX_TEST1_STACK_SIZE     2048
-#define MUTEX_TEST2_STACK_SIZE     2048
-#define QUEUE_TEST1_STACK_SIZE     2048
-#define QUEUE_TEST2_STACK_SIZE     2048
-#define SEMAPHORE_TEST1_STACK_SIZE 2048
-#define SEMAPHORE_TEST2_STACK_SIZE 2048
-#define SEMAPHORE_TEST3_STACK_SIZE 2048
-#define TIMER_TEST1_STACK_SIZE     2048
-#define TIMER_TEST2_STACK_SIZE     2048
-
-/****************************************************************************
- * Note: Task preemption is rarely needed.
- ****************************************************************************/
-#define TASK_PREEMPTION  0
-#define TASK_LIST        1
-#define TASK_STACK_USAGE 1
-#define TASK0_STACK_SIZE 2048
-
-/****************************************************************************
- * For our demonstration purposes, 2 priorities are enough.
- ****************************************************************************/
-#define TASK_HIGH_PRIORITY  0
-#define TASK_LOW_PRIORITY   1
-#define TASK_NUM_PRIORITIES 2
-
-/****************************************************************************
- * (maximum) number of ticks per second
- ****************************************************************************/
-#define TASK_TICK_HZ 1000
-
-#ifndef __ASM__
-/****************************************************************************
- * allow the kernel to use malloc
- ****************************************************************************/
-#define kmalloc malloc
-#define kfree   free
-#include <stdlib.h>
-
-/****************************************************************************
- * Function: taskTimer
- *    - callback from the kernel to schedule the next system tick
- * Arguments:
- *    ticks - number of ticks that the kernel wants to sleep
- * Notes:
- *    - it is acceptable to sleep less than what is requested by the kernel
- *    - always called with the kernel locked
- ****************************************************************************/
-void taskTimer(unsigned long ticks);
-
-/****************************************************************************
- * Function: taskWait
- *    - callback from the kernel when it has nothing to do until the next
- *      interrupt or system tick
- * Notes:
- *    - useful to call processor power management features here
- *    - always called with the kernel UNLOCKED
- ****************************************************************************/
-void taskWait();
-
-#ifdef SMP
-/****************************************************************************
- * Function: smpWake
- *    - callback from the kernel when it needs to wake a CPU
- * Arguments:
- *    cpu - CPU to wake
- * Notes:
- *    - This is to bring a CPU out of its (potential) sleep state.  If the
- *      taskWait() function doesn't put the processor into a low power state,
- *      then this function can be an empty stub.
- ****************************************************************************/
-void smpWake(int cpu);
+#ifndef SIC_BASE
+#define SIC_BASE 0x10003000
 #endif
-#endif
-#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+#define SIC_INT_STATUS    (*((volatile uint32_t*) (SIC_BASE + 0x0)))
+#define SIC_INT_RAWSTAT   (*((volatile uint32_t*) (SIC_BASE + 0x4)))
+#define SIC_INT_ENABLESET (*((volatile uint32_t*) (SIC_BASE + 0x8)))
+#define SIC_INT_ENABLECLR (*((volatile uint32_t*) (SIC_BASE + 0xC)))
+#define SIC_INT_SOFTSET   (*((volatile uint32_t*) (SIC_BASE + 0x10)))
+#define SIC_INT_SOFTCLR   (*((volatile uint32_t*) (SIC_BASE + 0x14)))
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void (*vector[32])(uint8_t) = {NULL};
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void sicVector(uint8_t n)
+{
+   uint32_t status = SIC_INT_STATUS;
+   uint8_t i = 0;
+
+   while (status)
+   {
+      if (status & 1)
+      {
+         if (vector[i] != NULL)
+            vector[i](i);
+         else
+            puts("unhandled SIC irq interrupt");
+      }
+
+      status >>= 1;
+      i++;
+   }
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void sicHandler(uint8_t n, void (*fx)(uint8_t))
+{
+   if (fx != NULL)
+      SIC_INT_ENABLESET |= 1 << n;
+   else
+      SIC_INT_ENABLECLR |= 1 << n;
+
+   vector[n] = fx;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void sicInit(uint8_t parent)
+{
+   irqHandler(parent, sicVector, false, 1 << cpuID());
+}

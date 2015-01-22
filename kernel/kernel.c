@@ -1072,6 +1072,9 @@ static void _timerAdd(int list, Timer* _timer, unsigned long ticks)
    Timer* previous = NULL;
    Timer* timer = timers[list];
 
+   if (ticks == 0)
+      ticks = 1;
+
    while (timer != NULL)
    {
       if (ticks < timer->ticks[0])

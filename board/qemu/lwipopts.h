@@ -25,88 +25,68 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#ifndef BOARD_H
-#define BOARD_H
+#ifndef LWIPOPTS_H
+#define LWIPOPTS_H
 
 /****************************************************************************
- * see QEMU_ARGS in Makefile before changing
+ *
  ****************************************************************************/
-#define BOARD_MEM_SIZE (128 * 1024 * 1024)
+#define LWIP_DHCP      1
+#define LWIP_DNS       1
+#define LWIP_TCP       1
+#define LWIP_NETIF_API 1
 
 /****************************************************************************
- * stack size defines for various testing
+ *
  ****************************************************************************/
-#define MUTEX_TEST1_STACK_SIZE     2048
-#define MUTEX_TEST2_STACK_SIZE     2048
-#define QUEUE_TEST1_STACK_SIZE     2048
-#define QUEUE_TEST2_STACK_SIZE     2048
-#define SEMAPHORE_TEST1_STACK_SIZE 2048
-#define SEMAPHORE_TEST2_STACK_SIZE 2048
-#define SEMAPHORE_TEST3_STACK_SIZE 2048
-#define TIMER_TEST1_STACK_SIZE     2048
-#define TIMER_TEST2_STACK_SIZE     2048
+#define TCPIP_THREAD_NAME      "tcp/ip"
+#define TCPIP_THREAD_STACKSIZE 2048
+#define TCPIP_THREAD_PRIO      0
+#define TCPIP_MBOX_SIZE        8
+#define TCP_MSS                (1500 - 40)
 
 /****************************************************************************
- * Note: Task preemption is rarely needed.
+ *
  ****************************************************************************/
-#define TASK_PREEMPTION  0
-#define TASK_LIST        1
-#define TASK_STACK_USAGE 1
-#define TASK0_STACK_SIZE 2048
+#define DEFAULT_RAW_RECVMBOX_SIZE 8
+#define DEFAULT_UDP_RECVMBOX_SIZE 8
+#define DEFAULT_TCP_RECVMBOX_SIZE 8
+#define DEFAULT_ACCEPTMBOX_SIZE   8
 
 /****************************************************************************
- * For our demonstration purposes, 2 priorities are enough.
+ *
  ****************************************************************************/
-#define TASK_HIGH_PRIORITY  0
-#define TASK_LOW_PRIORITY   1
-#define TASK_NUM_PRIORITIES 2
+#define SYS_LIGHTWEIGHT_PROT 1
+#define MEM_ALIGNMENT        4
+#define MEM_LIBC_MALLOC      1
+#define MEMP_MEM_MALLOC      1
 
 /****************************************************************************
- * (maximum) number of ticks per second
+ *
  ****************************************************************************/
-#define TASK_TICK_HZ 1000
-
-#ifndef __ASM__
-/****************************************************************************
- * allow the kernel to use malloc
- ****************************************************************************/
-#define kmalloc malloc
-#define kfree   free
-#include <stdlib.h>
+//#define LWIP_PLATFORM_BYTESWAP 1
+//#define LWIP_PLATFORM_HTONL(x) x
+//#define LWIP_PLATFORM_HTONS(x) x
 
 /****************************************************************************
- * Function: taskTimer
- *    - callback from the kernel to schedule the next system tick
- * Arguments:
- *    ticks - number of ticks that the kernel wants to sleep
- * Notes:
- *    - it is acceptable to sleep less than what is requested by the kernel
- *    - always called with the kernel locked
+ *
  ****************************************************************************/
-void taskTimer(unsigned long ticks);
+#define LWIP_PLATFORM_DIAG(x)
+#define LWIP_PLATFORM_ASSERT(x)
 
 /****************************************************************************
- * Function: taskWait
- *    - callback from the kernel when it has nothing to do until the next
- *      interrupt or system tick
- * Notes:
- *    - useful to call processor power management features here
- *    - always called with the kernel UNLOCKED
+ *
  ****************************************************************************/
-void taskWait();
+//#define LWIP_DEBUG       1
+//#define IP_DEBUG         LWIP_DBG_ON
+//#define ETHARP_DEBUG     LWIP_DBG_ON
+//#define ICMP_DEBUG       LWIP_DBG_ON
+//#define UDP_DEBUG        LWIP_DBG_ON
+//#define DHCP_DEBUG       LWIP_DBG_ON
+//#define TCP_INPUT_DEBUG  LWIP_DBG_ON
+//#define TCP_OUTPUT_DEBUG LWIP_DBG_ON
+//#define TCP_DEBUG        LWIP_DBG_ON
+//#define TCPIP_DEBUG      LWIP_DBG_ON
+//#define PBUF_DEBUG       LWIP_DBG_ON
 
-#ifdef SMP
-/****************************************************************************
- * Function: smpWake
- *    - callback from the kernel when it needs to wake a CPU
- * Arguments:
- *    cpu - CPU to wake
- * Notes:
- *    - This is to bring a CPU out of its (potential) sleep state.  If the
- *      taskWait() function doesn't put the processor into a low power state,
- *      then this function can be an empty stub.
- ****************************************************************************/
-void smpWake(int cpu);
-#endif
-#endif
 #endif

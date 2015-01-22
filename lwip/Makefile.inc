@@ -29,128 +29,64 @@
 ##############################################################################
 #
 ##############################################################################
-MACHINE = versatilepb
-#MACHINE = vexpress-a9
-PROJECT = AliOS
+LWIP_PATH ?= ../../lwip
 
 ##############################################################################
 #
 ##############################################################################
-QEMU_ARGS = -M $(MACHINE) -m 128M -nographic -kernel $(BIN_FILE)
-#            -net user -net nic,model=smc91c111 -net dump
-ifeq ($(MACHINE),vexpress-a9)
-   QEMU_ARGS += -smp 2
-endif
+INCLUDES += -I$(LWIP_PATH) -I$(LWIP_PATH)/include
 
 ##############################################################################
-#
+# API files
 ##############################################################################
-CROSS_COMPILE = arm-none-eabi-
+VPATH += $(LWIP_PATH)/api
+C_FILES += api_lib.c api_msg.c err.c netbuf.c netdb.c netifapi.c sockets.c \
+           tcpip.c
 
 ##############################################################################
-#
+# arch files
 ##############################################################################
-BIN_FILE = $(PROJECT).bin
-ELF_FILE = $(PROJECT).elf
-MAP_FILE = $(PROJECT).map
-LD_FILE = $(MACHINE).ld
+VPATH += $(LWIP_PATH)/arch
+C_FILES += sys_arch.c
 
 ##############################################################################
-#
+# core files
 ##############################################################################
-.PHONY: all
-all: $(BIN_FILE)
-
-##############################################################################
-#
-##############################################################################
-.PHONY: run debug
-
-run: $(BIN_FILE)
-	qemu-system-arm $(QEMU_ARGS)
-
-debug: $(BIN_FILE)
-	qemu-system-arm $(QEMU_ARGS) -s -S
+VPATH += $(LWIP_PATH)/core
+C_FILES += def.c init.c mem.c pbuf.c stats.c tcp_in.c udp.c dhcp.c memp.c \
+           raw.c sys.c tcp_out.c dns.c netif.c tcp.c timers.c
 
 ##############################################################################
-#
+# IPv4
 ##############################################################################
-C_FLAGS = -Wall -Wno-main -Wno-address -Os
-LD_FLAGS = -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
-INCLUDES = -I.
-C_FILES = board.c uart.c libc_glue.c
-S_FILES =
-
-ifeq ($(MACHINE),versatilepb)
-   C_FLAGS += -mcpu=arm926ej-s -DTIMER_BASE=0x101E2000 -DTIMER_IRQ=4 \
-              -DUART_BASE=0x101F1000 -DUART_IRQ=12 -DSIQ_IRQ=31
-else ifeq ($(MACHINE),vexpress-a9)
-   C_FLAGS += -mcpu=cortex-a9 -DTIMER_BASE=0x10011000 -DTIMER_IRQ=34 \
-              -DUART_BASE=0x10009000 -DUART_IRQ=37 -DSMP=2
-   S_FILES += board_smp.S
-endif
+INCLUDES += -I$(LWIP_PATH)/include/ipv4
+VPATH += $(LWIP_PATH)/core/ipv4
+C_FILES += autoip.c icmp.c igmp.c inet.c inet_chksum.c ip_addr.c ip.c \
+           ip_frag.c
 
 ##############################################################################
-#
+# IPv6
 ##############################################################################
-VPATH += ../../platform/arm-gcc
-C_FILES += platform.c
-ifeq ($(MACHINE),versatilepb)
-   C_FILES += vic.c sic.c
-else ifeq ($(MACHINE),vexpress-a9)
-   C_FILES += gic.c
-endif
-S_FILES += platform_asm.S
+#INCLUDES += -I$(LWIP_PATH)/include/ipv6
+#VPATH += $(LWIP_PATH)/core/ipv6
+#C_FILES += icmp6.c inet6.c ip6_addr.c ip6.c
 
 ##############################################################################
-#
+# SNMP
 ##############################################################################
-VPATH += ../../kernel
-C_FILES += kernel.c shell.c
-
-##############################################################################
-#
-##############################################################################
-ifeq ($(MACHINE),versatilepb)
-   include ../../lwip/Makefile.inc
-endif
+VPATH += $(LWIP_PATH)/core/snmp
+C_FILES += asn1_dec.c asn1_enc.c mib2.c mib_structs.c msg_in.c msg_out.c
 
 ##############################################################################
-#
+# netif
 ##############################################################################
-VPATH += ../../tests
-C_FILES += timer_test.c queue_test.c semaphore_test.c mutex_test.c
+VPATH += $(LWIP_PATH)/netif
+C_FILES += etharp.c ethernetif.c slipif.c
 
 ##############################################################################
-#
+# PPP
 ##############################################################################
-INCLUDES += $(addprefix -I,$(VPATH))
+VPATH += $(LWIP_PATH)/netif/ppp
+C_FILES += auth.c chpms.c ipcp.c magic.c pap.c ppp_oe.c vj.c chap.c fsm.c \
+           lcp.c md5.c ppp.c randm.c
 
-OBJ_FILES = $(C_FILES:%.c=%.o)
-OBJ_FILES += $(S_FILES:%.S=%.o)
-DEP_FILES = $(C_FILES:%.c=%.d)
-DEP_FILES += $(S_FILES:%.S=%.d)
-
-$(BIN_FILE): $(ELF_FILE)
-	$(CROSS_COMPILE)objcopy -O binary $< $@
-
-$(ELF_FILE): $(OBJ_FILES)
-	$(CROSS_COMPILE)gcc -o $@ $(OBJ_FILES) $(LD_FLAGS)
-
-%.o: %.c
-	$(CROSS_COMPILE)gcc $(C_FLAGS) $(INCLUDES) -M -o $*.d $<
-	$(CROSS_COMPILE)gcc $(C_FLAGS) $(INCLUDES) -c -o $@ $<
-
-%.o: %.S
-	$(CROSS_COMPILE)gcc -D__ASM__ $(C_FLAGS) $(INCLUDES) -M -o $*.d $<
-	$(CROSS_COMPILE)gcc -D__ASM__ $(C_FLAGS) $(INCLUDES) -c -o $@ $<
-
-.PHONY: clean obj_clean dep_clean
-clean: obj_clean dep_clean
-	rm -f $(BIN_FILE) $(ELF_FILE) $(MAP_FILE)
-obj_clean:
-	rm -f $(OBJ_FILES)
-dep_clean:
-	rm -f $(DEP_FILES)
-
--include $(DEP_FILES)

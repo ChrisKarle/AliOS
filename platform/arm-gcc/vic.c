@@ -28,6 +28,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "platform.h"
+#if SIQ_IRQ
+#include "sic.h"
+#endif
 #include "vic.h"
 
 /****************************************************************************
@@ -117,12 +120,21 @@ void _irqVector()
  ****************************************************************************/
 void irqHandler(uint8_t n, void (*fx)(uint8_t), bool edge, uint8_t cpuMask)
 {
-   if (fx != NULL)
-      VICINTENABLE |= 1 << n;
+   if (n > 32)
+   {
+#if SIQ_IRQ
+      sicHandler(n - 32, fx);
+#endif
+   }
    else
-      VICINTENABLE &= ~(1 << n);
+   {
+      if (fx != NULL)
+         VICINTENABLE |= 1 << n;
+      else
+         VICINTENABLE &= ~(1 << n);
 
-   vector[n] = fx;
+      vector[n] = fx;
+   }
 }
 
 /****************************************************************************
@@ -130,4 +142,7 @@ void irqHandler(uint8_t n, void (*fx)(uint8_t), bool edge, uint8_t cpuMask)
  ****************************************************************************/
 void irqInit()
 {
+#if SIQ_IRQ
+   sicInit(SIQ_IRQ);
+#endif
 }
