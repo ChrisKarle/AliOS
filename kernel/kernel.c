@@ -299,14 +299,18 @@ static void taskSwitch(Task* task, unsigned char state)
 
    if (_previous->state == TASK_STATE_END)
    {
+#ifdef kmalloc
+      unsigned short mask = TASK_FLAG_ALLOC | TASK_FLAG_FREE_ON_EXIT;
+#endif
       _taskExit(_previous);
-
-      if (_previous->flags & (TASK_FLAG_ALLOC | TASK_FLAG_FREE_ON_EXIT))
+#ifdef kmalloc
+      if ((_previous->flags & mask) == mask)
       {
          kfree(_previous->stack.base);
          kfree(_previous);
          _previous = NULL;
       }
+#endif
    }
 }
 
@@ -1030,6 +1034,36 @@ void taskInit(Task* task, const char* name, unsigned char priority,
 }
 
 #if TIMERS
+#ifdef kmalloc
+/****************************************************************************
+ *
+ ****************************************************************************/
+Timer* timerCreate(const char* name, unsigned char flags)
+{
+   Timer* timer = kmalloc(sizeof(Timer));
+
+   timer->name = name;
+   timer->task = NULL;
+   timer->fx = NULL;
+   timer->ptr = NULL;
+   timer->ticks[0] = 0;
+   timer->ticks[1] = 0;
+   timer->priority = 0;
+   timer->flags = flags;
+   timer->next = NULL;
+
+   return timer;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void timerDestroy(Timer* timer)
+{
+   kfree(timer);
+}
+#endif
+
 /****************************************************************************
  *
  ****************************************************************************/
@@ -1142,6 +1176,36 @@ void timerCancel(Timer* _timer)
 #endif
 
 #if QUEUES
+#ifdef kmalloc
+/****************************************************************************
+ *
+ ****************************************************************************/
+Queue* queueCreate(const char* name, unsigned int elementSize,
+                   unsigned int maxElements)
+{
+   Queue* queue = kmalloc(sizeof(Queue));
+
+   queue->name = name;
+   queue->size = elementSize;
+   queue->max = maxElements;
+   queue->count = 0;
+   queue->index = 0;
+   queue->buffer = kmalloc(elementSize * maxElements);
+   queue->task = NULL;
+
+   return queue;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void queueDestroy(Queue* queue)
+{
+   kfree(queue->buffer);
+   kfree(queue);
+}
+#endif
+
 /****************************************************************************
  *
  ****************************************************************************/
@@ -1401,6 +1465,32 @@ bool queuePop(Queue* queue, bool head, bool peek, void* dst,
 #endif
 
 #if SEMAPHORES
+#ifdef kmalloc
+/****************************************************************************
+ *
+ ****************************************************************************/
+Semaphore* semaphoreCreate(const char* name, unsigned int count,
+                           unsigned int max)
+{
+   Semaphore* semaphore = kmalloc(sizeof(Semaphore));
+
+   semaphore->name = name;
+   semaphore->count = count;
+   semaphore->max = max;
+   semaphore->task = NULL;
+
+   return semaphore;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void semaphoreDestroy(Semaphore* semaphore)
+{
+   kfree(semaphore);
+}
+#endif
+
 /****************************************************************************
  *
  ****************************************************************************/
@@ -1498,6 +1588,32 @@ bool semaphoreGive(Semaphore* semaphore)
 #endif
 
 #if MUTEXES
+#ifdef kmalloc
+/****************************************************************************
+ *
+ ****************************************************************************/
+Mutex* mutexCreate(const char* name)
+{
+   Mutex* mutex = kmalloc(sizeof(Mutex));
+
+   mutex->name = name;
+   mutex->count = 0;
+   mutex->priority = 0;
+   mutex->owner = NULL;
+   mutex->task = NULL;
+
+   return mutex;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void mutexDestroy(Mutex* mutex)
+{
+   kfree(mutex);
+}
+#endif
+
 /****************************************************************************
  *
  ****************************************************************************/

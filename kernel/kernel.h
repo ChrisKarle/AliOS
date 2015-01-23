@@ -106,13 +106,11 @@ typedef struct _Task
  * Function: taskCreate
  *    - dynamically create a new task container
  * Arguments:
- *    name       - task container to use
- *    stackSize  - pointer to task function
- *    freeOnExit - free on task container on task exit
+ *    name       - name of task
+ *    stackSize  - stack size
+ *    freeOnExit - free task container on task exit
  * Returns:
  *    - pointer to initialized task container
- * Notes:
- *    - must be destroyed with taskDestroy
  ****************************************************************************/
 Task* taskCreate(const char* name, unsigned long stackSize, bool freeOnExit);
 #endif
@@ -268,7 +266,7 @@ void taskInit(Task* task, const char* name, unsigned char priority,
 #if TIMERS
 /****************************************************************************
  * Macro: TIMER_CREATE
- *    - create a timer
+ *    - create a statically allocated timer
  * Arguments:
  *    name  - name of task
  *    flags - see below
@@ -317,6 +315,31 @@ typedef struct _Timer
    struct _Timer* next;
 
 } Timer;
+
+#ifdef kmalloc
+/****************************************************************************
+ * Function: timerCreate
+ *    - dynamically allocate a new timer
+ * Arguments:
+ *    name  - name of timer
+ *    flags - see timer flags above
+ * Returns:
+ *    - pointer to initialized timer structure
+ * Notes:
+ *    - must be destroyed with timerDestroy()
+ ****************************************************************************/
+Timer* timerCreate(const char* name, unsigned char flags);
+
+/****************************************************************************
+ * Function: timerDestroy
+ *    - destroy/free a previously allocated timer
+ * Arguments:
+ *    timer - timer previously allocated with timerCreate()
+ * Notes:
+ *    - cannot be called on an active timer
+ ****************************************************************************/
+void timerDestroy(Timer* timer);
+#endif
 
 /****************************************************************************
  * Function: timerAdd
@@ -390,6 +413,34 @@ typedef struct
    Task* task;
 
 } Queue;
+
+#ifdef kmalloc
+/****************************************************************************
+ * Function: queueCreate
+ *    - dynamically allocate a new queue
+ * Arguments:
+ *    name        - name of queue
+ *    elementSize - size of a single element in bytes
+ *    maxElements - maximum number of element in queue
+ * Returns:
+ *    - pointer to initialized queue structure
+ * Notes:
+ *    - must be destroyed with queueDestroy()
+ *    - maxElements of elementSize array is allocated
+ ****************************************************************************/
+Queue* queueCreate(const char* name, unsigned int elementSize,
+                   unsigned int maxElements);
+
+/****************************************************************************
+ * Function: queueDestroy
+ *    - destroy/free a previously allocated queue
+ * Arguments:
+ *    queue - queue previously allocated with queueCreate()
+ * Notes:
+ *    - cannot be called on an active queue
+ ****************************************************************************/
+void queueDestroy(Queue* queue);
+#endif
 
 /****************************************************************************
  * Function: _queuePush
@@ -497,6 +548,33 @@ typedef struct
 
 } Semaphore;
 
+#ifdef kmalloc
+/****************************************************************************
+ * Function: semaphoreCreate
+ *    - dynamically allocate a new semaphore
+ * Arguments:
+ *    name  - name of semaphore
+ *    count - initial "signal" state of semaphore
+ *    max   - maximum "signal" count of semaphore
+ * Returns:
+ *    - pointer to initialized semaphore
+ * Notes:
+ *    - must be destroyed with semaphoreDestroy()
+ ****************************************************************************/
+Semaphore* semaphoreCreate(const char* name, unsigned int count,
+                           unsigned int max);
+
+/****************************************************************************
+ * Function: semaphoreDestroy
+ *    - destroy/free a previously allocated semaphore
+ * Arguments:
+ *    semaphore - semaphore previously allocated with semaphoreCreate()
+ * Notes:
+ *    - cannot be called on an active semaphore
+ ****************************************************************************/
+void semaphoreDestroy(Semaphore* semaphore);
+#endif
+
 /****************************************************************************
  * Function: semaphoreTake
  *    - take/consume a semaphore signal
@@ -573,6 +651,30 @@ typedef struct
 	Task* task;
 
 } Mutex;
+
+#ifdef kmalloc
+/****************************************************************************
+ * Function: mutexCreate
+ *    - dynamically allocate a new mutex
+ * Arguments:
+ *    name - name of mutex
+ * Returns:
+ *    - pointer to initialized mutex
+ * Notes:
+ *    - must be destroyed with mutexDestroy()
+ ****************************************************************************/
+Mutex* mutexCreate(const char* name);
+
+/****************************************************************************
+ * Function: mutexDestroy
+ *    - destroy/free a previously allocated mutex
+ * Arguments:
+ *    mutex - semaphore previously allocated with mutexCreate()
+ * Notes:
+ *    - cannot be called on an active mutex
+ ****************************************************************************/
+void mutexDestroy(Mutex* mutex);
+#endif
 
 /****************************************************************************
  * Function: mutexLock
