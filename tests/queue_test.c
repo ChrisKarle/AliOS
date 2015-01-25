@@ -141,6 +141,6 @@ void queueTestCmd(int argc, char* argv[])
 void queueTest()
 {
    timerAdd(&timer, NULL, fxTimer, NULL, 0, rand() % 100);
-   taskStart(&task1, fxTask1, NULL, TASK_LOW_PRIORITY);
    taskStart(&task2, fxTask2, NULL, TASK_HIGH_PRIORITY);
+   taskStart(&task1, fxTask1, NULL, TASK_LOW_PRIORITY);
 }
