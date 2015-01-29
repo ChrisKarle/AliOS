@@ -25,12 +25,42 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#ifndef LIBC_GLUE_H
-#define LIBC_GLUE_H
+#ifndef PL011_H
+#define PL011_H
+
+#include "kernel.h"
+#include "uart.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-void libcInit();
+#define PL011_CREATE(base, txQueue, rxQueue) {{}, base, {txQueue, rxQueue}}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+typedef struct
+{
+   UART uart;
+   unsigned long base;
+
+   struct
+   {
+      Queue* tx;
+      Queue* rx;
+
+   } queue;
+
+} PL011;
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void pl011IRQ(unsigned int n, void* pl011);
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void pl011Init(PL011* pl011, unsigned long clk, unsigned long baud, int dps);
 
 #endif

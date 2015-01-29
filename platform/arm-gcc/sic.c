@@ -25,49 +25,54 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#include <stdint.h>
 #include <stdio.h>
-#include "platform.h"
 #include "sic.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-#ifndef SIC_BASE
-#define SIC_BASE 0x10003000
-#endif
+#define SIC_INT_STATUS(s)    (*((volatile unsigned long*) (s->base + 0x00)))
+#define SIC_INT_RAWSTAT(s)   (*((volatile unsigned long*) (s->base + 0x04)))
+#define SIC_INT_ENABLESET(s) (*((volatile unsigned long*) (s->base + 0x08)))
+#define SIC_INT_ENABLECLR(s) (*((volatile unsigned long*) (s->base + 0x0C)))
+#define SIC_INT_SOFTSET(s)   (*((volatile unsigned long*) (s->base + 0x10)))
+#define SIC_INT_SOFTCLR(s)   (*((volatile unsigned long*) (s->base + 0x14)))
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define SIC_INT_STATUS    (*((volatile uint32_t*) (SIC_BASE + 0x0)))
-#define SIC_INT_RAWSTAT   (*((volatile uint32_t*) (SIC_BASE + 0x4)))
-#define SIC_INT_ENABLESET (*((volatile uint32_t*) (SIC_BASE + 0x8)))
-#define SIC_INT_ENABLECLR (*((volatile uint32_t*) (SIC_BASE + 0xC)))
-#define SIC_INT_SOFTSET   (*((volatile uint32_t*) (SIC_BASE + 0x10)))
-#define SIC_INT_SOFTCLR   (*((volatile uint32_t*) (SIC_BASE + 0x14)))
-
-/****************************************************************************
- *
- ****************************************************************************/
-static void (*vector[32])(uint8_t) = {NULL};
-
-/****************************************************************************
- *
- ****************************************************************************/
-static void sicVector(uint8_t n)
+static void addHandler(struct _IrqCtrl* ctrl, unsigned int n,
+                       void (*fx)(unsigned int, void*), void* arg, bool edge,
+                       unsigned int cpuMask)
 {
-   uint32_t status = SIC_INT_STATUS;
-   uint8_t i = 0;
+   SIC* sic = (SIC*) ctrl;
+
+   if (fx != NULL)
+      SIC_INT_ENABLESET(sic) |= 1 << n;
+   else
+      SIC_INT_ENABLECLR(sic) |= 1 << n;
+
+   sic->vector[n] = fx;
+   sic->arg[n] = arg;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void sicIRQ(unsigned int n, void* _sic)
+{
+   SIC* sic = _sic;
+   unsigned long status = SIC_INT_STATUS(sic);
+   unsigned int i = 0;
 
    while (status)
    {
       if (status & 1)
       {
-         if (vector[i] != NULL)
-            vector[i](i);
+         if (sic->vector[i] != NULL)
+            sic->vector[i](i, sic->arg[i]);
          else
-            puts("unhandled SIC irq interrupt");
+            puts("unhandled irq");
       }
 
       status >>= 1;
@@ -78,20 +83,7 @@ static void sicVector(uint8_t n)
 /****************************************************************************
  *
  ****************************************************************************/
-void sicHandler(uint8_t n, void (*fx)(uint8_t))
+void sicInit(SIC* sic)
 {
-   if (fx != NULL)
-      SIC_INT_ENABLESET |= 1 << n;
-   else
-      SIC_INT_ENABLECLR |= 1 << n;
-
-   vector[n] = fx;
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-void sicInit(uint8_t parent)
-{
-   irqHandler(parent, sicVector, false, 1 << cpuID());
+   sic->ctrl.addHandler = addHandler;
 }

@@ -299,11 +299,11 @@ static void taskSwitch(Task* task, unsigned char state)
 
    if (_previous->state == TASK_STATE_END)
    {
-#ifdef kmalloc
+#ifdef kfree
       unsigned short mask = TASK_FLAG_ALLOC | TASK_FLAG_FREE_ON_EXIT;
 #endif
       _taskExit(_previous);
-#ifdef kmalloc
+#ifdef kfree
       if ((_previous->flags & mask) == mask)
       {
          kfree(_previous->stack.base);
@@ -1054,7 +1054,9 @@ Timer* timerCreate(const char* name, unsigned char flags)
 
    return timer;
 }
+#endif
 
+#ifdef kfree
 /****************************************************************************
  *
  ****************************************************************************/
@@ -1198,7 +1200,9 @@ Queue* queueCreate(const char* name, unsigned int elementSize,
 
    return queue;
 }
+#endif
 
+#ifdef kfree
 /****************************************************************************
  *
  ****************************************************************************/
@@ -1484,7 +1488,9 @@ Semaphore* semaphoreCreate(const char* name, unsigned int count,
 
    return semaphore;
 }
+#endif
 
+#ifdef kfree
 /****************************************************************************
  *
  ****************************************************************************/
@@ -1607,7 +1613,9 @@ Mutex* mutexCreate(const char* name)
 
    return mutex;
 }
+#endif
 
+#ifdef kfree
 /****************************************************************************
  *
  ****************************************************************************/

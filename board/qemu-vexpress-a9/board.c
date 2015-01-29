@@ -26,81 +26,17 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
 #include <stdio.h>
-#include <stdlib.h>
-#include "board.h"
+#include "gic.h"
 #include "kernel.h"
 #include "libc_glue.h"
 #include "mutex_test.h"
-#include "platform.h"
+#include "pl011.h"
 #include "queue_test.h"
 #include "semaphore_test.h"
 #include "shell.h"
+#include "sp804.h"
 #include "timer_test.h"
-#include "uart.h"
 
-/****************************************************************************
- *
- ****************************************************************************/
-#ifndef TIMER_BASE
-#define TIMER_BASE 0x10011000
-#endif
-#ifndef TIMER_IRQ
-#define TIMER_IRQ  34
-#endif
-#ifndef TIMER_CLK
-#define TIMER_CLK  1000000
-#endif
-
-/****************************************************************************
- * SP804 timer
- ****************************************************************************/
-#define TIMER0LOAD    (*((volatile uint32_t*) (TIMER_BASE + 0x000)))
-#define TIMER0VALUE   (*((volatile uint32_t*) (TIMER_BASE + 0x004)))
-#define TIMER0CONTROL (*((volatile uint32_t*) (TIMER_BASE + 0x008)))
-#define TIMER0INTCLR  (*((volatile uint32_t*) (TIMER_BASE + 0x00C)))
-#define TIMER0RIS     (*((volatile uint32_t*) (TIMER_BASE + 0x010)))
-#define TIMER0MIS     (*((volatile uint32_t*) (TIMER_BASE + 0x014)))
-#define TIMER0BGLOAD  (*((volatile uint32_t*) (TIMER_BASE + 0x018)))
-#define TIMER1LOAD    (*((volatile uint32_t*) (TIMER_BASE + 0x020)))
-#define TIMER1VALUE   (*((volatile uint32_t*) (TIMER_BASE + 0x024)))
-#define TIMER1CONTROL (*((volatile uint32_t*) (TIMER_BASE + 0x028)))
-#define TIMER1INTCLR  (*((volatile uint32_t*) (TIMER_BASE + 0x02C)))
-#define TIMER1RIS     (*((volatile uint32_t*) (TIMER_BASE + 0x030)))
-#define TIMER1MIS     (*((volatile uint32_t*) (TIMER_BASE + 0x034)))
-#define TIMER1BGLOAD  (*((volatile uint32_t*) (TIMER_BASE + 0x038)))
-#define TIMERITCR     (*((volatile uint32_t*) (TIMER_BASE + 0xF00)))
-#define TIMERITOP     (*((volatile uint32_t*) (TIMER_BASE + 0xF04)))
-
-/****************************************************************************
- *
- ****************************************************************************/
-#ifdef SMP
-/* timer0 for qemu vexpress-a9 does not appear to be global */
-#define DYNAMIC_TICK 0
-#else
-#define DYNAMIC_TICK 1
-#endif
-#define TICK_CLKS    (TIMER_CLK / TASK_TICK_HZ)
-#define MAX_TICKS    (-1UL / TICK_CLKS)
-
-#ifdef SMP
-/****************************************************************************
- *
- ****************************************************************************/
-static Task task[SMP];
-
-/****************************************************************************
- *
- ****************************************************************************/
-void smpInit();
-#else
-/****************************************************************************
- *
- ****************************************************************************/
-static Task task[1];
-#endif
-
-#if TASK_LIST
 /****************************************************************************
  *
  ****************************************************************************/
@@ -108,16 +44,13 @@ static void taskListCmd(int argc, char* argv[])
 {
    taskList();
 }
-#endif
 
 /****************************************************************************
  *
  ****************************************************************************/
 static const ShellCmd SHELL_CMDS[] =
 {
-#if TASK_LIST
    {"tl", taskListCmd},
-#endif
    {"mutex_test", mutexTestCmd},
    {"queue_test", queueTestCmd},
    {"semaphore_test", semaphoreTestCmd},
@@ -128,55 +61,67 @@ static const ShellCmd SHELL_CMDS[] =
 /****************************************************************************
  *
  ****************************************************************************/
-static void timerIRQ(unsigned char n)
+static PL011 pl011 = PL011_CREATE
+(
+   0x10009000,
+   NULL,
+   QUEUE_CREATE_PTR("pl011_rx", 1, 8)
+);
+static SP804 sp804 = SP804_CREATE(0x10011000);
+static GIC gic = GIC_CREATE(0x1E000100, 0x1E001000);
+static Task task[SMP];
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void sgiIRQ(unsigned int n, void* arg)
 {
-   TIMER0INTCLR = 1;
-   _taskTick(TIMER0LOAD / TICK_CLKS);
-#if TASK_PREEMPTION
-#ifdef SMP
-   cpuIRQ(-1, 1);
-#endif
-   _taskPreempt(true);
-#endif
+   if (n > 0)
+      _taskPreempt(n > 1);
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-void taskTimer(unsigned long ticks)
+static void taskTick(HWTimer* timer)
 {
-#if DYNAMIC_TICK
-   if (ticks > MAX_TICKS)
-      ticks = MAX_TICKS;
-
-   if (ticks > 0)
-   {
-      TIMER0LOAD = ticks * TICK_CLKS;
-      TIMER0CONTROL |= 0x80;
-   }
-   else
-   {
-      TIMER0CONTROL &= ~0x80;
-   }
-#endif
+   _taskTick(1);
+   taskPreempt(true);
 }
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void smpInit()
+{
+   void** jmpPtr = (void**) 0x10000030;
+   extern unsigned long _smpInit[];
+   *jmpPtr = _smpInit;
+   smpWake(-1);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void taskTimer(unsigned long ticks) {}
 
 /****************************************************************************
  *
  ****************************************************************************/
 void taskWait()
 {
-   cpuSleep();
+   __asm__ __volatile__("wfi");
 }
 
-#ifdef SMP
 /****************************************************************************
  *
  ****************************************************************************/
-void smpIRQ(uint8_t n)
+void taskPreempt(bool flag)
 {
-   if (n > 0)
-      _taskPreempt(true);
+#if TASK_PREEMPTION
+   gicSGI(&gic, -1, flag ? 2 : 1);
+   _taskPreempt(flag);
+#endif
 }
 
 /****************************************************************************
@@ -184,7 +129,7 @@ void smpIRQ(uint8_t n)
  ****************************************************************************/
 void smpWake(int cpu)
 {
-   cpuIRQ(cpu, 0);
+   gicSGI(&gic, cpu, 0);
 }
 
 /****************************************************************************
@@ -192,38 +137,48 @@ void smpWake(int cpu)
  ****************************************************************************/
 void smpMain(void* stack, unsigned long size)
 {
-   irqInit();
+   gicInitSMP(&gic);
    taskInit(&task[cpuID()], "main+", TASK_LOW_PRIORITY, stack, size);
    enableInterrupts();
 
    for (;;)
-      taskSleep(1000);
+      taskSleep(TASK_TICK_HZ);
 }
-#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void _irqVector()
+{
+   gicIRQ(0, &gic);
+}
 
 /****************************************************************************
  *
  ****************************************************************************/
 int main(void* stack, unsigned long size)
 {
-   irqInit();
-   uartInit();
-   libcInit();
-   taskInit(&task[0], "main", TASK_LOW_PRIORITY, stack, size);
-#ifdef SMP
-   irqHandler(0, smpIRQ, true, 0xFF);
-   irqHandler(1, smpIRQ, true, 0xFF);
+   taskInit(&task[cpuID()], "main", TASK_HIGH_PRIORITY, stack, size);
+
+   gicInit(&gic);
+
+   pl011Init(&pl011, 4000000, 115200, UART_DPS_8N1);
+   gic.ctrl.addHandler(&gic.ctrl, 37, pl011IRQ, &pl011, false, 1 << cpuID());
+   libcInit(&pl011.uart);
+
+   sp804Init(&sp804, 1000000);
+   gic.ctrl.addHandler(&gic.ctrl, 34, sp804IRQ, &sp804, true, 1 << cpuID());
+   sp804.timer.callback = taskTick;
+   sp804.timer.periodic = true;
+   sp804.timer.load(&sp804.timer, sp804.timer.clk / TASK_TICK_HZ);
+   sp804.timer.enable(&sp804.timer, true);
+
+   gic.ctrl.addHandler(&gic.ctrl, 0, sgiIRQ, NULL, true, 0xFF);
+   gic.ctrl.addHandler(&gic.ctrl, 1, sgiIRQ, NULL, true, 0xFF);
+   gic.ctrl.addHandler(&gic.ctrl, 2, sgiIRQ, NULL, true, 0xFF);
    smpInit();
-#endif
-   puts("kOS on ARM");
 
-   irqHandler(TIMER_IRQ, timerIRQ, true, 0x01);
-   TIMER0CONTROL |= 0x42;
-   TIMER0LOAD = TIMER_CLK / TASK_TICK_HZ;
-#if !DYNAMIC_TICK
-   TIMER0CONTROL |= 0x80;
-#endif
-
+   puts("AliOS on ARM");
    enableInterrupts();
 
    mutexTest();

@@ -25,175 +25,177 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#include <avr/cpufunc.h>
 #include <avr/interrupt.h>
 #include <avr/io.h>
-#include <avr/sleep.h>
 #include <stdio.h>
 #include "avr_uart0.h"
-#include "board.h"
 #include "kernel.h"
-#include "libc_glue.h"
-#include "mutex_test.h"
-#include "queue_test.h"
-#include "semaphore_test.h"
-#include "shell.h"
-#include "timer_test.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define DYNAMIC_TICK 1
+#ifndef UART0_BAUD
+#define UART0_BAUD 38400
+#endif
+
+#ifndef UART0_DPS
+#define UART0_DPS UART_DPS_8N1
+#endif
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void taskListCmd(int argc, char* argv[])
+#define BAUD UART0_BAUD
+#include <util/setbaud.h>
+
+/****************************************************************************
+ * Be careful with buffered output!  It can make debugging extremely difficult
+ * because your print output will no longer be in sync with the code.
+ ****************************************************************************/
+#ifndef UART0_TX_BUFFER_SIZE
+#define UART0_TX_BUFFER_SIZE 0
+#endif
+
+#ifndef UART0_RX_BUFFER_SIZE
+#define UART0_RX_BUFFER_SIZE 8
+#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+#if UART0_TX_BUFFER_SIZE > 0
+static Queue txQueue = QUEUE_CREATE("uart0_tx", 1, UART0_TX_BUFFER_SIZE);
+#endif
+
+#if UART0_RX_BUFFER_SIZE > 0
+static Queue rxQueue = QUEUE_CREATE("uart0_rx", 1, UART0_RX_BUFFER_SIZE);
+#endif
+
+#if UART0_TX_BUFFER_SIZE > 0
+/****************************************************************************
+ *
+ ****************************************************************************/
+ISR(USART0_UDRE_vect)
 {
-   taskList();
-}
+   uint8_t c;
 
-/****************************************************************************
- *
- ****************************************************************************/
-static const ShellCmd SHELL_CMDS[] =
-{
-   {"tl", taskListCmd},
-   {"mutex_test", mutexTestCmd},
-   {"queue_test", queueTestCmd},
-   {"semaphore_test", semaphoreTestCmd},
-   {"timer_test", timerTestCmd},
-   {NULL, NULL}
-};
-
-/****************************************************************************
- *
- ****************************************************************************/
-extern uint8_t __stack[];
-static Task task;
-static UART uart;
-
-/****************************************************************************
- *
- ****************************************************************************/
-void taskTimer(unsigned long ticks)
-{
-#if DYNAMIC_TICK
-   if (ticks > 15)
+   if (_queuePop(&txQueue, true, false, &c))
    {
-      if (ticks > 31)
-         OCR2A = F_CPU / 1000 / 64 * 2;
-      else
-         OCR2A = F_CPU / 1000 / 64;
-
-      TCCR2B = 0x07;
-   }
-   else if (ticks > 3)
-   {
-      if (ticks > 7)
-         OCR2A = F_CPU / 1000 / 64 * 2;
-      else
-         OCR2A = F_CPU / 1000 / 64;
-
-      TCCR2B = 0x06;
-   }
-   else if (ticks > 1)
-   {
-      OCR2A = F_CPU / 1000 / 64;
-      TCCR2B = 0x05;
-   }
-   else if (ticks > 0)
-   {
-      OCR2A = F_CPU / 1000 / 64;
-      TCCR2B = 0x04;
+      UDR0 = c;
+      taskPreempt(false);
    }
    else
    {
-      TCCR2B = 0x00;
+      UCSR0B &= ~0x20;
    }
-
-   TCNT2 = 0;
+}
 #endif
+
+#if UART0_RX_BUFFER_SIZE > 0
+/****************************************************************************
+ *
+ ****************************************************************************/
+ISR(USART0_RX_vect)
+{
+   uint8_t c = UDR0;
+
+   if (_queuePush(&rxQueue, true, &c))
+      taskPreempt(false);
 }
+#endif
 
 /****************************************************************************
  *
  ****************************************************************************/
-void taskWait()
+static void tx(UART* uart, int c)
 {
-   cli();
-   sleep_enable();
-   sei();
-   sleep_cpu();
-   sleep_disable();
-   _NOP();
-}
+#if UART0_TX_BUFFER_SIZE > 0
+   uint8_t c8;
 
-/****************************************************************************
- *
- ****************************************************************************/
-ISR(TIMER2_COMPA_vect)
-{
-   unsigned long ticks = 1;
-
-#if DYNAMIC_TICK
-   switch (TCCR2B)
+   if (SREG & 0x80)
    {
-      case 0x07:
-         if (OCR2A > (F_CPU / 1000 / 64))
-            ticks = 32;
-         else
-            ticks = 16;
-         break;
-
-      case 0x06:
-         if (OCR2A > (F_CPU / 1000 / 64))
-            ticks = 8;
-         else
-            ticks = 4;
-         break;
-
-      case 0x05:
-         ticks = 2;
-         break;
+      c8 = (uint8_t) c;
+      queuePush(&txQueue, true, &c8, -1);
+      UCSR0B |= 0x20;
    }
+   else
+#endif
+   {
+      while ((UCSR0A & 0x20) == 0);
+
+#if UART0_TX_BUFFER_SIZE > 0
+      while (_queuePop(&txQueue, true, false, &c8))
+      {
+         UDR0 = c8;
+         while ((UCSR0A & 0x20) == 0);
+      }
 #endif
 
-   _taskTick(ticks);
-
-   taskPreempt(false);
+      UDR0 = (uint8_t) c;
+      while ((UCSR0A & 0x40) == 0);
+   }
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-int main()
+static int rx(UART* uart, bool blocking)
 {
-   void* stackBase = __stack - TASK0_STACK_SIZE + 1;
+   int c = EOF;
+#if UART0_RX_BUFFER_SIZE > 0
+   uint8_t c8;
 
-   taskInit(&task, "main", TASK_LOW_PRIORITY, stackBase, TASK0_STACK_SIZE);
-   uart0Init(&uart);
-   libcInit(&uart);
-
-   /* timer2 default tick (1ms) */
-   OCR2A = F_CPU / 1000 / 64;
-   TCCR2A = 0x02;
-#if !DYNAMIC_TICK
-   TCCR2B = 0x04;
+   if (SREG & 0x80)
+   {
+      if (queuePop(&rxQueue, true, false, &c8, blocking ? uart->timeout : 0))
+         c = c8;
+   }
+   else
 #endif
-   TIMSK2 = 0x02;
+   {
+#if UART0_RX_BUFFER_SIZE > 0
+      if (_queuePop(&rxQueue, true, false, &c8))
+      {
+         c = c8;
+      }
+      else
+#endif
+      {
+         if (blocking)
+            while ((UCSR0A & 0x80) == 0);
 
-   set_sleep_mode(SLEEP_MODE_IDLE);
+         if (UCSR0A & 0x80)
+            c = UDR0;
+      }
+   }
 
-   puts("AliOS on AVR");
-   sei();
+   return c;
+}
 
-   mutexTest();
-   queueTest();
-   semaphoreTest();
-   timerTest();
+/****************************************************************************
+ *
+ ****************************************************************************/
+void uart0Init(UART* uart)
+{
+   uart->tx = tx;
+   uart->rx = rx;
+   uart->timeout = -1;
 
-   shellRun(SHELL_CMDS);
+   UBRR0H = UBRRH_VALUE;
+   UBRR0L = UBRRL_VALUE;
 
-   return 0;
+   switch (UART0_DPS)
+   {
+      case UART_DPS_8N1:
+         UCSR0C = 0x06;
+         break;
+   }
+
+#if USE_2X
+   UCSR0A = 0x01;
+#endif
+   UCSR0B = 0x18;
+#if UART0_RX_BUFFER_SIZE > 0
+   UCSR0B |= 0x80;
+#endif
 }

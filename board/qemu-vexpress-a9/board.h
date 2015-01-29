@@ -34,7 +34,7 @@
 #define BOARD_MEM_SIZE (128 * 1024 * 1024)
 
 /****************************************************************************
- * stack size defines for various testing
+ *
  ****************************************************************************/
 #define MUTEX_TEST1_STACK_SIZE     2048
 #define MUTEX_TEST2_STACK_SIZE     2048
@@ -55,58 +55,46 @@
 #define TASK0_STACK_SIZE 2048
 
 /****************************************************************************
- * For our demonstration purposes, 2 priorities are enough.
+ *
  ****************************************************************************/
 #define TASK_HIGH_PRIORITY  0
 #define TASK_LOW_PRIORITY   1
 #define TASK_NUM_PRIORITIES 2
 
 /****************************************************************************
- * (maximum) number of ticks per second
+ *
  ****************************************************************************/
 #define TASK_TICK_HZ 1000
 
 #ifndef __ASM__
-/****************************************************************************
- * allow the kernel to use malloc
- ****************************************************************************/
-#define kmalloc malloc
-#define kfree   free
+#include <stdbool.h>
 #include <stdlib.h>
 
 /****************************************************************************
- * Function: taskTimer
- *    - callback from the kernel to schedule the next system tick
- * Arguments:
- *    ticks - number of ticks that the kernel wants to sleep
- * Notes:
- *    - it is acceptable to sleep less than what is requested by the kernel
- *    - always called with the kernel locked
+ * allow the kernel to use malloc/free
+ ****************************************************************************/
+#define kmalloc malloc
+#define kfree free
+
+/****************************************************************************
+ *
  ****************************************************************************/
 void taskTimer(unsigned long ticks);
 
 /****************************************************************************
- * Function: taskWait
- *    - callback from the kernel when it has nothing to do until the next
- *      interrupt or system tick
- * Notes:
- *    - useful to call processor power management features here
- *    - always called with the kernel UNLOCKED
+ *
  ****************************************************************************/
 void taskWait();
 
-#ifdef SMP
 /****************************************************************************
- * Function: smpWake
- *    - callback from the kernel when it needs to wake a CPU
- * Arguments:
- *    cpu - CPU to wake
- * Notes:
- *    - This is to bring a CPU out of its (potential) sleep state.  If the
- *      taskWait() function doesn't put the processor into a low power state,
- *      then this function can be an empty stub.
+ *
+ ****************************************************************************/
+void taskPreempt(bool flag);
+
+/****************************************************************************
+ *
  ****************************************************************************/
 void smpWake(int cpu);
 #endif
-#endif
+
 #endif

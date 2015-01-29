@@ -25,99 +25,108 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#include <stdint.h>
 #include <stdio.h>
 #include "gic.h"
-#include "platform.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-#ifndef ICC_BASE
-#define ICC_BASE 0x1E000100
-#endif
+#define ICCICR(i)  (*((volatile unsigned long*) (i->iccBase + 0x000)))
+#define ICCPMR(i)  (*((volatile unsigned long*) (i->iccBase + 0x004)))
+#define ICCBPR(i)  (*((volatile unsigned long*) (i->iccBase + 0x008)))
+#define ICCIAR(i)  (*((volatile unsigned long*) (i->iccBase + 0x00C)))
+#define ICCEOIR(i) (*((volatile unsigned long*) (i->iccBase + 0x010)))
+#define ICCRPR(i)  (*((volatile unsigned long*) (i->iccBase + 0x014)))
+#define ICCHPIR(i) (*((volatile unsigned long*) (i->iccBase + 0x018)))
+#define ICCABPR(i) (*((volatile unsigned long*) (i->iccBase + 0x01C)))
+#define ICCIDR(i)  (*((volatile unsigned long*) (i->iccBase + 0x0FC)))
 
 /****************************************************************************
  *
  ****************************************************************************/
-#ifndef ICD_BASE
-#define ICD_BASE 0x1E001000
-#endif
+#define ICDDCR(i)   (*((volatile unsigned long*) (i->icdBase + 0x000)))
+#define ICDICTR(i)  (*((volatile unsigned long*) (i->icdBase + 0x004)))
+#define ICDIIDR(i)  (*((volatile unsigned long*) (i->icdBase + 0x008)))
+#define ICDISRn(i)  ((volatile unsigned long*) (i->icdBase + 0x080))
+#define ICDISERn(i) ((volatile unsigned long*) (i->icdBase + 0x100))
+#define ICDICERn(i) ((volatile unsigned long*) (i->icdBase + 0x180))
+#define ICDISPRn(i) ((volatile unsigned long*) (i->icdBase + 0x200))
+#define ICDICPRn(i) ((volatile unsigned long*) (i->icdBase + 0x280))
+#define ICDABRn(i)  ((volatile unsigned long*) (i->icdBase + 0x300))
+#define ICDIPRn(i)  ((volatile unsigned long*) (i->icdBase + 0x400))
+#define ICDIPTRn(i) ((volatile unsigned long*) (i->icdBase + 0x800))
+#define ICDICFRn(i) ((volatile unsigned long*) (i->icdBase + 0xC00))
+#define ICPPISR(i)  (*((volatile unsigned long*) (i->icdBase + 0xD00)))
+#define ICSPISRn(i) ((volatile unsigned long*) (i->icdBase + 0xD04))
+#define ICDSGIR(i)  (*((volatile unsigned long*) (i->icdBase + 0xF00)))
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define ICCICR   (*((volatile uint32_t*) (ICC_BASE + 0x000)))
-#define ICCPMR   (*((volatile uint32_t*) (ICC_BASE + 0x004)))
-#define ICCBPR   (*((volatile uint32_t*) (ICC_BASE + 0x008)))
-#define ICCIAR   (*((volatile uint32_t*) (ICC_BASE + 0x00C)))
-#define ICCEOIR  (*((volatile uint32_t*) (ICC_BASE + 0x010)))
-#define ICCRPR   (*((volatile uint32_t*) (ICC_BASE + 0x014)))
-#define ICCHPIR  (*((volatile uint32_t*) (ICC_BASE + 0x018)))
-#define ICCABPR  (*((volatile uint32_t*) (ICC_BASE + 0x01C)))
-#define ICCIDR   (*((volatile uint32_t*) (ICC_BASE + 0x0FC)))
-
-/****************************************************************************
- *
- ****************************************************************************/
-#define ICDDCR   (*((volatile uint32_t*) (ICD_BASE + 0x000)))
-#define ICDICTR  (*((volatile uint32_t*) (ICD_BASE + 0x004)))
-#define ICDIIDR  (*((volatile uint32_t*) (ICD_BASE + 0x008)))
-#define ICDISRn  ((volatile uint32_t*) (ICD_BASE + 0x080))
-#define ICDISERn ((volatile uint32_t*) (ICD_BASE + 0x100))
-#define ICDICERn ((volatile uint32_t*) (ICD_BASE + 0x180))
-#define ICDISPRn ((volatile uint32_t*) (ICD_BASE + 0x200))
-#define ICDICPRn ((volatile uint32_t*) (ICD_BASE + 0x280))
-#define ICDABRn  ((volatile uint32_t*) (ICD_BASE + 0x300))
-#define ICDIPRn  ((volatile uint32_t*) (ICD_BASE + 0x400))
-#define ICDIPTRn ((volatile uint32_t*) (ICD_BASE + 0x800))
-#define ICDICFRn ((volatile uint32_t*) (ICD_BASE + 0xC00))
-#define ICPPISR  (*((volatile uint32_t*) (ICD_BASE + 0xD00)))
-#define ICSPISRn ((volatile uint32_t*) (ICD_BASE + 0xD04))
-#define ICDSGIR  (*((volatile uint32_t*) (ICD_BASE + 0xF00)))
-
-/****************************************************************************
- *
- ****************************************************************************/
-static void (*vector[64])(uint8_t) = {NULL};
-
-/****************************************************************************
- *
- ****************************************************************************/
-void cpuIRQ(int cpu, uint8_t n)
+static void addHandler(struct _IrqCtrl* ctrl, unsigned int n,
+                       void (*fx)(unsigned int, void*), void* arg, bool edge,
+                       unsigned int cpuMask)
 {
-   if (cpu < 0)
-   {
-      ICDSGIR = 0x01000000 | (n & 0x0F);
-   }
+   GIC* gic = (GIC*) ctrl;
+
+   ICDDCR(gic) = 0;
+   ICCICR(gic) = 0;
+
+   ICDICFRn(gic)[n / 16] &= ~(0x3 << ((n % 16) * 2));
+
+   if (edge)
+      ICDICFRn(gic)[n / 16] |= (0x2 << ((n % 16) * 2));
+
+   ICDIPTRn(gic)[n / 4] &= ~(0xFF << ((n % 4) * 8));
+   ICDIPTRn(gic)[n / 4] |= (cpuMask << ((n % 4) * 8));
+
+   if (fx != NULL)
+      ICDISERn(gic)[n / 32] |= (1 << (n % 32));
    else
-   {
-      uint32_t cpuMask = 1 << cpu;
-      ICDSGIR = (cpuMask << 16)  | (n & 0x0F);
-   }
+      ICDICERn(gic)[n / 32] |= (1 << (n % 32));
+
+   gic->vector[n] = fx;
+   gic->arg[n] = arg;
+
+   ICCPMR(gic) = 0xFFFF;
+   ICCICR(gic) = 3;
+   ICDDCR(gic) = 1;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-void _irqVector()
+void gicSGI(GIC* gic, int cpu, unsigned int n)
 {
-   uint32_t n = ICCIAR;
+   if (cpu < 0)
+      ICDSGIR(gic) = 0x01000000 | (n & 0x0F);
+   else
+      ICDSGIR(gic) = ((1 << cpu) << 16)  | (n & 0x0F);
+}
 
-   ICCEOIR = n;
+/****************************************************************************
+ *
+ ****************************************************************************/
+void gicIRQ(unsigned int _n, void* _gic)
+{
+   GIC* gic = (GIC*) _gic;
+   unsigned long n;
+
+   n = ICCIAR(gic);
+   ICCEOIR(gic) = n;
    n &= 0x000001FF;
 
-#if 1
+#if 0
    /* QEMU likes to send IRQs to CPUs it shouldn't. */
-   if ((cpuID() > 0) && (n > 1))
+   if ((cpuID() > 0) && (n > 2))
    {
-      puts("IRQ on wrong CPU");
+      puts("irq on wrong cpu");
       return;
    }
 #endif
 
-   if (vector[n] != NULL)
-      vector[n](n);
+   if (gic->vector[n] != NULL)
+      gic->vector[n](n, gic->arg[n]);
    else
       puts("unhandled irq");
 }
@@ -125,52 +134,30 @@ void _irqVector()
 /****************************************************************************
  *
  ****************************************************************************/
-void irqHandler(uint8_t n, void (*fx)(uint8_t), bool edge, uint8_t cpuMask)
+void gicInitSMP(GIC* gic)
 {
-   ICDDCR = 0;
-   ICCICR = 0;
-
-   ICDICFRn[n / 16] &= ~(0x3 << ((n % 16) * 2));
-
-   if (edge)
-      ICDICFRn[n / 16] |= (0x2 << ((n % 16) * 2));
-
-   ICDIPTRn[n / 4] &= ~(0xFF << ((n % 4) * 8));
-   ICDIPTRn[n / 4] |= (cpuMask << ((n % 4) * 8));
-
-   ICDISERn[n / 32] |= (1 << (n % 32));
-
-   vector[n] = fx;
-
-   ICCPMR = 0xFFFF;
-   ICCICR = 3;
-   ICDDCR = 1;
+   ICCICR(gic) = 1;
+   ICCEOIR(gic) = ICCIAR(gic);
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-void irqInit()
+void gicInit(GIC* gic)
 {
-   if (cpuID() > 0)
-   {
-      ICCICR = 1;
-      ICCEOIR = ICCIAR;
-   }
-   else
-   {
-      int i;
+   int i;
 
-      for (i = 0; i < (64 / 16); i++)
-         ICDICFRn[i] = 0x00000000;
+   gic->ctrl.addHandler = addHandler;
 
-      for (i = 0; i < (64 / 4); i++)
-         ICDIPRn[i] = 0x00000000;
+   for (i = 0; i < (64 / 16); i++)
+      ICDICFRn(gic)[i] = 0x00000000;
 
-      for (i = 0; i < (64 / 4); i++)
-         ICDIPTRn[i] = 0x01010101;
+   for (i = 0; i < (64 / 4); i++)
+      ICDIPRn(gic)[i] = 0x00000000;
 
-      for (i = 0; i < (64 / 32); i++)
-         ICDICERn[i] = 0xFFFFFFFF;
-   }
+   for (i = 0; i < (64 / 4); i++)
+      ICDIPTRn(gic)[i] = 0x01010101;
+
+   for (i = 0; i < (64 / 32); i++)
+      ICDICERn(gic)[i] = 0xFFFFFFFF;
 }

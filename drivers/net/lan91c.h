@@ -25,47 +25,48 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#ifndef UART_H
-#define UART_H
+#ifndef LAN91C_H
+#define LAN91C_H
+
+#include "kernel.h"
+#include "lwip/netif.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-#include <stdbool.h>
+#define LAN91C_CREATE(base, rxTask, priority) \
+{                                             \
+   {},                                        \
+   base,                                      \
+   rxTask,                                    \
+   priority,                                  \
+   QUEUE_CREATE_PTR("lan91c", 1, 4),          \
+   MUTEX_CREATE_PTR("lan91c")                 \
+}
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define UART_BAUD_115200 115200
-#define UART_BAUD_57600   57600
-#define UART_BAUD_38400   38400
-#define UART_BAUD_19200   19200
-#define UART_BAUD_9600     9600
-#define UART_DPS_8N1          1
+typedef struct
+{
+   struct netif netif;
+   unsigned long base;
+   Task* rxTask;
+   unsigned char priority;
+   Queue* rxQueue;
+   Mutex* lock;
+
+} LAN91C;
 
 /****************************************************************************
  *
  ****************************************************************************/
-void uartTx(int c);
-
-/****************************************************************************
- * Notes:
- *   - a value of -1 (the default) means to wait forever
- *   - this value is ignored when interrupts are disabled
- ****************************************************************************/
-unsigned long uartRxTimeout(unsigned long timeout);
-
-/****************************************************************************
- * Notes:
- *   - returns EOF if no character ready
- *   - blocking set true means to wait uartRxTimeout ticks (unless interrupts
- *     are disabled) else returns immediately
- ****************************************************************************/
-int uartRx(bool blocking);
+void lan91cIRQ(unsigned int n, void* lan91c);
 
 /****************************************************************************
  *
  ****************************************************************************/
-void uartInit();
+void lan91cInit(LAN91C* lan91c, struct ip_addr* ip, struct ip_addr* netmask,
+                struct ip_addr* gateway, bool setDefault);
 
 #endif

@@ -28,9 +28,6 @@
 #ifndef PLATFORM_H
 #define PLATFORM_H
 
-/****************************************************************************
- *
- ****************************************************************************/
 #include "kernel.h"
 
 /****************************************************************************
@@ -39,100 +36,55 @@
 #define NORETURN __attribute__((noreturn))
 
 /****************************************************************************
- * Function: _kernelLock
- *    - locks the kernel from within an interrupt context
- * Notes:
- *    - called by _taskTick() & _taskPreempt()
+ *
  ****************************************************************************/
 void _kernelLock();
 
 /****************************************************************************
- * Function: _kernelUnlock
- *    - unlocks the kernel from within an interrupt context
- * Notes:
- *    - called by _taskTick() & _taskPreempt()
+ *
  ****************************************************************************/
 void _kernelUnlock();
 
 /****************************************************************************
- * Function: kernelLock
- *    - locks the kernel
- * Notes:
- *    - must be able to be called from within an interrupt context
+ *
  ****************************************************************************/
 void kernelLock();
 
 /****************************************************************************
- * Function: kernelUnlock
- *    - unlocks the kernel
- * Notes:
- *    - must be able to be called from within an interrupt context
+ *
  ****************************************************************************/
 void kernelUnlock();
 
 /****************************************************************************
- * Function: taskSetup
- *    - initialize a task for execution
- * Arguments:
- *    task - task to use
- *    fx   - pointer to task function
- *    arg1 - first argument to pass to task function
- *    arg2 - second argument to pass to task function
+ *
  ****************************************************************************/
 void taskSetup(Task* task, void (*fx)(void*, void*), void* arg1, void* arg2);
 
 #if TASK_STACK_USAGE
 /****************************************************************************
- * Function: taskStackUsage
- *    - compute the amount of stack usage for a task
- * Arguments:
- *    task - task to use
- * Returns:
- *    - number of bytes of stack in use
- * Notes:
- *    - uses a stack marker to determine the amount of stack used up to when
- *      this function is called
+ *
  ****************************************************************************/
 unsigned long taskStackUsage(Task* task);
 #endif
 
 /****************************************************************************
- * Function: _taskEntry
- *    - callback before task is executed for the first time
- * Arguments:
- *    task - task about to run
- * Notes:
- *    - the task is "technically" executing but has yet to call the task
- *      function
+ *
  ****************************************************************************/
 void _taskEntry(Task* task);
 
 /****************************************************************************
- * Function: _taskExit
- *    - callback after a task has exited
- * Arguments:
- *    task - task that exited
- * Notes:
- *    - the resources associated with the task are no longer in use
+ *
  ****************************************************************************/
 void _taskExit(Task* task);
 
 /****************************************************************************
- * Function: _taskSwitch
- *    - context switch between tasks
- * Arguments:
- *    current - current task executing
- *    next    - next task to execute
+ *
  ****************************************************************************/
 void _taskSwitch(Task* current, Task* next);
 
 /****************************************************************************
- * Function: _taskInit
- *    - initialize platform task stuff and "main" task
- * Arguments:
- *    task      - task container for "main" task
- *    stackBase - base/bottom of stack
- *    stackSize - size of stack
+ *
  ****************************************************************************/
 void _taskInit(Task* task, void* stackBase, unsigned long stackSize);
+
 #endif

@@ -26,7 +26,6 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 #include "platform.h"
 

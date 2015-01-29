@@ -54,6 +54,16 @@
 }
 
 /****************************************************************************
+ * Macro: TASK_CREATE_PTR
+ *    - create a static pointer to a task container
+ * Arguments:
+ *    name      - name of task
+ *    stackSize - stack size
+ ****************************************************************************/
+#define TASK_CREATE_PTR(name, stackSize) \
+   ((Task[1]) {TASK_CREATE(name, stackSize)})
+
+/****************************************************************************
  *
  ****************************************************************************/
 #define TASK_STATE_READY     0
@@ -288,6 +298,18 @@ void taskInit(Task* task, const char* name, unsigned char priority,
 }
 
 /****************************************************************************
+ * Macro: TIMER_CREATE_PTR
+ *    - create a pointer to a statically allocated timer
+ * Arguments:
+ *    name  - name of task
+ *    flags - see below
+ * Notes:
+ *    - See above.
+ ****************************************************************************/
+#define TIMER_CREATE_PTR(name, flags) \
+   ((Timer[1]) {TIMER_CREATE(name, flags)})
+
+/****************************************************************************
  * TIMER_FLAG_ASYNC - Do not start a task for this timer.  The callback
  *                    function is called from within the taskTick function.
  * TIMER_FLAG_PERIODIC - The timer will be rescheduled automatically when it
@@ -329,7 +351,9 @@ typedef struct _Timer
  *    - must be destroyed with timerDestroy()
  ****************************************************************************/
 Timer* timerCreate(const char* name, unsigned char flags);
+#endif
 
+#ifdef kfree
 /****************************************************************************
  * Function: timerDestroy
  *    - destroy/free a previously allocated timer
@@ -400,6 +424,19 @@ void timerCancel(Timer* timer);
 }
 
 /****************************************************************************
+ * Macro: QUEUE_CREATE_PTR
+ *    - create a pointer to a statically allocated queue
+ * Arguments:
+ *    name        - name of queue
+ *    elementSize - size of a single element in bytes
+ *    maxElements - maximum number of element in queue
+ * Notes:
+ *    - maxElements of elementSize array is statically allocated
+ ****************************************************************************/
+#define QUEUE_CREATE_PTR(name, elementSize, maxElements) \
+   ((Queue[1]) {QUEUE_CREATE(name, elementSize, maxElements)})
+
+/****************************************************************************
  *
  ****************************************************************************/
 typedef struct
@@ -430,7 +467,9 @@ typedef struct
  ****************************************************************************/
 Queue* queueCreate(const char* name, unsigned int elementSize,
                    unsigned int maxElements);
+#endif
 
+#ifdef kfree
 /****************************************************************************
  * Function: queueDestroy
  *    - destroy/free a previously allocated queue
@@ -537,6 +576,17 @@ bool queuePop(Queue* queue, bool head, bool peek, void* dst,
 }
 
 /****************************************************************************
+ * Macro: SEMAPHORE_CREATE
+ *    - create a pointer to a statically allocated semaphore
+ * Arguments:
+ *    name  - name of semaphore
+ *    count - initial "signal" state of semaphore
+ *    max   - maximum "signal" count of semaphore
+ ****************************************************************************/
+#define SEMAPHORE_CREATE_PTR(name, count, max) \
+   ((Semaphore[1]) {SEMAPHORE_CREATE(name, count, max)})
+
+/****************************************************************************
  *
  ****************************************************************************/
 typedef struct
@@ -563,7 +613,9 @@ typedef struct
  ****************************************************************************/
 Semaphore* semaphoreCreate(const char* name, unsigned int count,
                            unsigned int max);
+#endif
 
+#ifdef kfree
 /****************************************************************************
  * Function: semaphoreDestroy
  *    - destroy/free a previously allocated semaphore
@@ -640,6 +692,14 @@ bool semaphoreGive(Semaphore* semaphore);
 }
 
 /****************************************************************************
+ * Macro: MUTEX_CREATE
+ *    - create a pointer to a statically allocated mutex
+ * Arguments:
+ *    name - name of mutex
+ ****************************************************************************/
+#define MUTEX_CREATE_PTR(name) ((Mutex[1]) {MUTEX_CREATE(name)})
+
+/****************************************************************************
  *
  ****************************************************************************/
 typedef struct
@@ -664,7 +724,9 @@ typedef struct
  *    - must be destroyed with mutexDestroy()
  ****************************************************************************/
 Mutex* mutexCreate(const char* name);
+#endif
 
+#ifdef kfree
 /****************************************************************************
  * Function: mutexDestroy
  *    - destroy/free a previously allocated mutex

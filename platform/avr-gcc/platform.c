@@ -28,7 +28,6 @@
 #include <avr/interrupt.h>
 #include <stdint.h>
 #include <string.h>
-#include "board.h"
 #include "platform.h"
 
 /****************************************************************************

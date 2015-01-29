@@ -25,46 +25,37 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#ifndef UART_H
-#define UART_H
+SECTIONS
+{
+   __mem_base__ = 0x60010000;
 
-/****************************************************************************
- *
- ****************************************************************************/
-#include <stdbool.h>
+   .text __mem_base__ :
+   {
+      __text__ = .;
+      *(.start)
+      *(.text)
+      __text_end__ = .;
+   }
 
-/****************************************************************************
- *
- ****************************************************************************/
-#define UART_BAUD_57600 57600
-#define UART_BAUD_38400 38400
-#define UART_BAUD_19200 19200
-#define UART_BAUD_9600   9600
-#define UART_DPS_8N1     0x06
+   .rodata ALIGN(4) :
+   {
+      __rodata__ = .;
+      *(.rodata)
+      __rodata_end__ = .;
+   }
 
-/****************************************************************************
- *
- ****************************************************************************/
-void uartTx(int c);
+   .data ALIGN(4) :
+   {
+      __data__ = .;
+      *(.data)
+      __data_end__ = .;
+   }
 
-/****************************************************************************
- * Notes:
- *   - a value of -1 (the default) means to wait forever
- *   - this value is ignored when interrupts are disabled
- ****************************************************************************/
-unsigned long uartRxTimeout(unsigned long timeout);
-
-/****************************************************************************
- * Notes:
- *   - returns EOF if no character ready
- *   - blocking set true means to wait uartRxTimeout ticks (unless interrupts
- *     are disabled) else returns immediately
- ****************************************************************************/
-int uartRx(bool blocking);
-
-/****************************************************************************
- *
- ****************************************************************************/
-void uartInit();
-
-#endif
+   .bss ALIGN(4) :
+   {
+      __bss__ = .;
+      *(.bss)
+      *(COMMON)
+      __bss_end__ = .;
+   }
+}

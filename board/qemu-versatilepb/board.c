@@ -25,188 +25,139 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#include <avr/interrupt.h>
-#include <avr/io.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "board.h"
 #include "kernel.h"
-#include "uart.h"
+#include "lan91c.h"
+#include "libc_glue.h"
+#include "pl011.h"
+#include "shell.h"
+#include "sic.h"
+#include "sp804.h"
+#include "vic.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-#ifndef UART_BAUD
-#define UART_BAUD UART_BAUD_38400
-#endif
-
-#ifndef UART_DPS
-#define UART_DPS UART_DPS_8N1
-#endif
-
-/****************************************************************************
- *
- ****************************************************************************/
-#define BAUD UART_BAUD
-#include <util/setbaud.h>
-
-/****************************************************************************
- * Be careful with buffered output!  It can make debugging extremely difficult
- * because your print output will no longer be in sync with the code.
- ****************************************************************************/
-#ifndef UART_TX_BUFFER_SIZE
-#define UART_TX_BUFFER_SIZE 0
-#endif
-
-#ifndef UART_RX_BUFFER_SIZE
-#define UART_RX_BUFFER_SIZE 8
-#endif
-
-/****************************************************************************
- *
- ****************************************************************************/
-#if UART_TX_BUFFER_SIZE > 0
-static Queue txQueue = QUEUE_CREATE("uart_tx", 1, UART_TX_BUFFER_SIZE);
-#endif
-
-#if UART_RX_BUFFER_SIZE > 0
-static Queue rxQueue = QUEUE_CREATE("uart_rx", 1, UART_RX_BUFFER_SIZE);
-static unsigned long rxTimeout = -1;
-#endif
-
-#if UART_TX_BUFFER_SIZE > 0
-/****************************************************************************
- *
- ****************************************************************************/
-ISR(USART0_UDRE_vect)
+static void taskListCmd(int argc, char* argv[])
 {
-   uint8_t c;
+   taskList();
+}
 
-   if (_queuePop(&txQueue, true, false, &c))
+/****************************************************************************
+ *
+ ****************************************************************************/
+static const ShellCmd SHELL_CMDS[] =
+{
+   {"tl", taskListCmd},
+   {NULL, NULL}
+};
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static PL011 pl011 = PL011_CREATE
+(
+   0x101F1000,
+   NULL,
+   QUEUE_CREATE_PTR("pl011_rx", 1, 8)
+);
+static SP804 sp804 = SP804_CREATE(0x101E2000);
+static LAN91C lan91c = LAN91C_CREATE
+(
+   0x10010000,
+   TASK_CREATE_PTR("lan91c", 2048),
+   TASK_HIGH_PRIORITY
+);
+static VIC vic = VIC_CREATE(0x10140000);
+static SIC sic = SIC_CREATE(0x10003000);
+static Task task;
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void taskTick(HWTimer* timer)
+{
+   unsigned long tickClks = sp804.timer.clk / TASK_TICK_HZ;
+   _taskTick(timer->loadValue / tickClks);
+   taskPreempt(true);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void taskTimer(unsigned long ticks)
+{
+   unsigned long tickClks = sp804.timer.clk / TASK_TICK_HZ;
+   unsigned long maxTicks = sp804.timer.max / tickClks;
+
+   if (ticks > maxTicks)
+      ticks = maxTicks;
+
+   if (ticks > 0)
    {
-      UDR0 = c;
-#if TASK_PREEMPTION
-      _taskPreempt(false);
-#endif
+      sp804.timer.load(&sp804.timer, ticks * tickClks);
+      sp804.timer.enable(&sp804.timer, true);
    }
    else
    {
-      UCSR0B &= ~0x20;
-   }
-}
-#endif
-
-#if UART_RX_BUFFER_SIZE > 0
-/****************************************************************************
- *
- ****************************************************************************/
-ISR(USART0_RX_vect)
-{
-   uint8_t c = UDR0;
-
-   if (_queuePush(&rxQueue, true, &c))
-   {
-#if TASK_PREEMPTION
-      _taskPreempt(0);
-#endif
-   }
-}
-#endif
-
-/****************************************************************************
- *
- ****************************************************************************/
-void uartTx(int c)
-{
-#if UART_TX_BUFFER_SIZE > 0
-   uint8_t c8;
-
-   if (SREG & 0x80)
-   {
-      c8 = (uint8_t) c;
-      queuePush(&txQueue, true, &c8, -1);
-      UCSR0B |= 0x20;
-   }
-   else
-#endif
-   {
-      while ((UCSR0A & 0x20) == 0);
-
-#if UART_TX_BUFFER_SIZE > 0
-      while (_queuePop(&txQueue, true, false, &c8))
-      {
-         UDR0 = c8;
-         while ((UCSR0A & 0x20) == 0);
-      }
-#endif
-
-      UDR0 = (uint8_t) c;
-      while ((UCSR0A & 0x40) == 0);
+      sp804.timer.enable(&sp804.timer, false);
    }
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-unsigned long uartRxTimeout(unsigned long timeout)
+void taskWait()
 {
-#if UART_RX_BUFFER_SIZE > 0
-   unsigned long tmp = rxTimeout;
-   rxTimeout = timeout;
-   return tmp;
-#else
+   unsigned long unused;
+   __asm__ __volatile__("mcr p15, 0, %0, c7, c0, 4" : "=r" (unused));
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void _irqVector()
+{
+   vicIRQ(0, &vic);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+int main(void* stack, unsigned long size)
+{
+   struct ip_addr gateway;
+   struct ip_addr netmask;
+   struct ip_addr ip;
+
+   IP4_ADDR(&gateway, 10, 0, 2, 2);
+   IP4_ADDR(&netmask, 255, 255, 255, 0);
+   IP4_ADDR(&ip, 10, 0, 2, 15);
+
+   taskInit(&task, "main", TASK_HIGH_PRIORITY, stack, size);
+
+   vicInit(&vic);
+   sicInit(&sic);
+   vic.ctrl.addHandler(&vic.ctrl, 31, sicIRQ, &sic, false, 1);
+
+   pl011Init(&pl011, 4000000, 115200, UART_DPS_8N1);
+   vic.ctrl.addHandler(&vic.ctrl, 12, pl011IRQ, &pl011, false, 1);
+   libcInit(&pl011.uart);
+
+   sp804Init(&sp804, 1000000);
+   vic.ctrl.addHandler(&vic.ctrl, 4, sp804IRQ, &sp804, false, 1);
+   sp804.timer.callback = taskTick;
+   sp804.timer.periodic = true;
+
+   lan91cInit(&lan91c, &ip, &netmask, &gateway, true);
+   sic.ctrl.addHandler(&sic.ctrl, 25, lan91cIRQ, &lan91c, false, 1);
+
+   puts("AliOS on ARM");
+   enableInterrupts();
+
+   shellRun(SHELL_CMDS);
+
    return 0;
-#endif
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-int uartRx(bool blocking)
-{
-   int c = EOF;
-#if UART_RX_BUFFER_SIZE > 0
-   uint8_t c8;
-
-   if (SREG & 0x80)
-   {
-      if (queuePop(&rxQueue, true, false, &c8, blocking ? rxTimeout : 0))
-         c = c8;
-   }
-   else
-#endif
-   {
-#if UART_RX_BUFFER_SIZE > 0
-      if (_queuePop(&rxQueue, true, false, &c8))
-      {
-         c = c8;
-      }
-      else
-#endif
-      {
-         if (blocking)
-            while ((UCSR0A & 0x80) == 0);
-
-         if (UCSR0A & 0x80)
-            c = UDR0;
-      }
-   }
-
-   return c;
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-void uartInit()
-{
-   UBRR0H = UBRRH_VALUE;
-   UBRR0L = UBRRL_VALUE;
-   UCSR0C = UART_DPS;
-#if USE_2X
-   UCSR0A = 0x01;
-#endif
-   UCSR0B = 0x18;
-#if UART_RX_BUFFER_SIZE > 0
-   UCSR0B |= 0x80;
-#endif
 }

@@ -57,23 +57,22 @@
 #define TASK_NUM_PRIORITIES 2
 
 /****************************************************************************
- * Function: taskTimer
- *    - callback from the kernel to schedule the next system tick
- * Arguments:
- *    ticks - number of ticks that the kernel wants to sleep
- * Notes:
- *    - it is acceptable to sleep less than what is requested by the kernel
- *    - always called with the kernel locked
+ *
+ ****************************************************************************/
+#if TASK_PREEMPTION
+#define taskPreempt(f) _taskPreempt(f)
+#else
+#define taskPreempt(f)
+#endif
+
+/****************************************************************************
+ *
  ****************************************************************************/
 void taskTimer(unsigned long ticks);
 
 /****************************************************************************
- * Function: taskWait
- *    - callback from the kernel when it has nothing to do until the next
- *      interrupt or system tick
- * Notes:
- *    - useful to call processor power management features here
- *    - always called with the kernel UNLOCKED
+ *
  ****************************************************************************/
 void taskWait();
+
 #endif

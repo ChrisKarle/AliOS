@@ -25,89 +25,91 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#include <stdint.h>
 #include <stdio.h>
-#include "platform.h"
-#if SIQ_IRQ
-#include "sic.h"
-#endif
 #include "vic.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-#ifndef VIC_BASE
-#define VIC_BASE 0x10140000
-#endif
+#define VICIRQSTATUS(v)    (*((volatile unsigned long*) (v->base + 0x000)))
+#define VICFIQSTATUS(v)    (*((volatile unsigned long*) (v->base + 0x004)))
+#define VICRAWINTR(v)      (*((volatile unsigned long*) (v->base + 0x008)))
+#define VICINTSELECT(v)    (*((volatile unsigned long*) (v->base + 0x00C)))
+#define VICINTENABLE(v)    (*((volatile unsigned long*) (v->base + 0x010)))
+#define VICINTENCLEAR(v)   (*((volatile unsigned long*) (v->base + 0x014)))
+#define VICSOFTINT(v)      (*((volatile unsigned long*) (v->base + 0x018)))
+#define VICSOFTINTCLEAR(v) (*((volatile unsigned long*) (v->base + 0x01C)))
+#define VICPROTECTION(v)   (*((volatile unsigned long*) (v->base + 0x020)))
+#define VICVECTADDR(v)     (*((volatile unsigned long*) (v->base + 0x030)))
+#define VICDEFVECTADDR(v)  (*((volatile unsigned long*) (v->base + 0x034)))
+#define VICVECTADDR0(v)    (*((volatile unsigned long*) (v->base + 0x100)))
+#define VICVECTADDR1(v)    (*((volatile unsigned long*) (v->base + 0x104)))
+#define VICVECTADDR2(v)    (*((volatile unsigned long*) (v->base + 0x108)))
+#define VICVECTADDR3(v)    (*((volatile unsigned long*) (v->base + 0x10C)))
+#define VICVECTADDR4(v)    (*((volatile unsigned long*) (v->base + 0x110)))
+#define VICVECTADDR5(v)    (*((volatile unsigned long*) (v->base + 0x114)))
+#define VICVECTADDR6(v)    (*((volatile unsigned long*) (v->base + 0x118)))
+#define VICVECTADDR7(v)    (*((volatile unsigned long*) (v->base + 0x11C)))
+#define VICVECTADDR8(v)    (*((volatile unsigned long*) (v->base + 0x120)))
+#define VICVECTADDR9(v)    (*((volatile unsigned long*) (v->base + 0x124)))
+#define VICVECTADDR10(v)   (*((volatile unsigned long*) (v->base + 0x128)))
+#define VICVECTADDR11(v)   (*((volatile unsigned long*) (v->base + 0x12C)))
+#define VICVECTADDR12(v)   (*((volatile unsigned long*) (v->base + 0x130)))
+#define VICVECTADDR13(v)   (*((volatile unsigned long*) (v->base + 0x134)))
+#define VICVECTADDR14(v)   (*((volatile unsigned long*) (v->base + 0x138)))
+#define VICVECTADDR15(v)   (*((volatile unsigned long*) (v->base + 0x13C)))
+#define VICVECTCNTL0(v)    (*((volatile unsigned long*) (v->base + 0x200)))
+#define VICVECTCNTL1(v)    (*((volatile unsigned long*) (v->base + 0x204)))
+#define VICVECTCNTL2(v)    (*((volatile unsigned long*) (v->base + 0x208)))
+#define VICVECTCNTL3(v)    (*((volatile unsigned long*) (v->base + 0x20C)))
+#define VICVECTCNTL4(v)    (*((volatile unsigned long*) (v->base + 0x210)))
+#define VICVECTCNTL5(v)    (*((volatile unsigned long*) (v->base + 0x214)))
+#define VICVECTCNTL6(v)    (*((volatile unsigned long*) (v->base + 0x218)))
+#define VICVECTCNTL7(v)    (*((volatile unsigned long*) (v->base + 0x21C)))
+#define VICVECTCNTL8(v)    (*((volatile unsigned long*) (v->base + 0x220)))
+#define VICVECTCNTL9(v)    (*((volatile unsigned long*) (v->base + 0x224)))
+#define VICVECTCNTL10(v)   (*((volatile unsigned long*) (v->base + 0x228)))
+#define VICVECTCNTL11(v)   (*((volatile unsigned long*) (v->base + 0x22C)))
+#define VICVECTCNTL12(v)   (*((volatile unsigned long*) (v->base + 0x230)))
+#define VICVECTCNTL13(v)   (*((volatile unsigned long*) (v->base + 0x234)))
+#define VICVECTCNTL14(v)   (*((volatile unsigned long*) (v->base + 0x238)))
+#define VICVECTCNTL15(v)   (*((volatile unsigned long*) (v->base + 0x23C)))
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define VICIRQSTATUS    (*((volatile uint32_t*) (VIC_BASE + 0x000)))
-#define VICFIQSTATUS    (*((volatile uint32_t*) (VIC_BASE + 0x004)))
-#define VICRAWINTR      (*((volatile uint32_t*) (VIC_BASE + 0x008)))
-#define VICINTSELECT    (*((volatile uint32_t*) (VIC_BASE + 0x00C)))
-#define VICINTENABLE    (*((volatile uint32_t*) (VIC_BASE + 0x010)))
-#define VICINTENCLEAR   (*((volatile uint32_t*) (VIC_BASE + 0x014)))
-#define VICSOFTINT      (*((volatile uint32_t*) (VIC_BASE + 0x018)))
-#define VICSOFTINTCLEAR (*((volatile uint32_t*) (VIC_BASE + 0x01C)))
-#define VICPROTECTION   (*((volatile uint32_t*) (VIC_BASE + 0x020)))
-#define VICVECTADDR     (*((volatile uint32_t*) (VIC_BASE + 0x030)))
-#define VICDEFVECTADDR  (*((volatile uint32_t*) (VIC_BASE + 0x034)))
-#define VICVECTADDR0    (*((volatile uint32_t*) (VIC_BASE + 0x100)))
-#define VICVECTADDR1    (*((volatile uint32_t*) (VIC_BASE + 0x104)))
-#define VICVECTADDR2    (*((volatile uint32_t*) (VIC_BASE + 0x108)))
-#define VICVECTADDR3    (*((volatile uint32_t*) (VIC_BASE + 0x10C)))
-#define VICVECTADDR4    (*((volatile uint32_t*) (VIC_BASE + 0x110)))
-#define VICVECTADDR5    (*((volatile uint32_t*) (VIC_BASE + 0x114)))
-#define VICVECTADDR6    (*((volatile uint32_t*) (VIC_BASE + 0x118)))
-#define VICVECTADDR7    (*((volatile uint32_t*) (VIC_BASE + 0x11C)))
-#define VICVECTADDR8    (*((volatile uint32_t*) (VIC_BASE + 0x120)))
-#define VICVECTADDR9    (*((volatile uint32_t*) (VIC_BASE + 0x124)))
-#define VICVECTADDR10   (*((volatile uint32_t*) (VIC_BASE + 0x128)))
-#define VICVECTADDR11   (*((volatile uint32_t*) (VIC_BASE + 0x12C)))
-#define VICVECTADDR12   (*((volatile uint32_t*) (VIC_BASE + 0x130)))
-#define VICVECTADDR13   (*((volatile uint32_t*) (VIC_BASE + 0x134)))
-#define VICVECTADDR14   (*((volatile uint32_t*) (VIC_BASE + 0x138)))
-#define VICVECTADDR15   (*((volatile uint32_t*) (VIC_BASE + 0x13C)))
-#define VICVECTCNTL0    (*((volatile uint32_t*) (VIC_BASE + 0x200)))
-#define VICVECTCNTL1    (*((volatile uint32_t*) (VIC_BASE + 0x204)))
-#define VICVECTCNTL2    (*((volatile uint32_t*) (VIC_BASE + 0x208)))
-#define VICVECTCNTL3    (*((volatile uint32_t*) (VIC_BASE + 0x20C)))
-#define VICVECTCNTL4    (*((volatile uint32_t*) (VIC_BASE + 0x210)))
-#define VICVECTCNTL5    (*((volatile uint32_t*) (VIC_BASE + 0x214)))
-#define VICVECTCNTL6    (*((volatile uint32_t*) (VIC_BASE + 0x218)))
-#define VICVECTCNTL7    (*((volatile uint32_t*) (VIC_BASE + 0x21C)))
-#define VICVECTCNTL8    (*((volatile uint32_t*) (VIC_BASE + 0x220)))
-#define VICVECTCNTL9    (*((volatile uint32_t*) (VIC_BASE + 0x224)))
-#define VICVECTCNTL10   (*((volatile uint32_t*) (VIC_BASE + 0x228)))
-#define VICVECTCNTL11   (*((volatile uint32_t*) (VIC_BASE + 0x22C)))
-#define VICVECTCNTL12   (*((volatile uint32_t*) (VIC_BASE + 0x230)))
-#define VICVECTCNTL13   (*((volatile uint32_t*) (VIC_BASE + 0x234)))
-#define VICVECTCNTL14   (*((volatile uint32_t*) (VIC_BASE + 0x238)))
-#define VICVECTCNTL15   (*((volatile uint32_t*) (VIC_BASE + 0x23C)))
-
-/****************************************************************************
- *
- ****************************************************************************/
-static void (*vector[32])(uint8_t) = {NULL};
-
-/****************************************************************************
- *
- ****************************************************************************/
-void _irqVector()
+static void addHandler(struct _IrqCtrl* ctrl, unsigned int n,
+                       void (*fx)(unsigned int, void*), void* arg, bool edge,
+                       unsigned int cpuMask)
 {
-   uint32_t status = VICIRQSTATUS;
-   uint8_t i = 0;
+   VIC* vic = (VIC*) ctrl;
+
+   if (fx != NULL)
+      VICINTENABLE(vic) |= 1 << n;
+   else
+      VICINTENCLEAR(vic) |= 1 << n;
+
+   vic->vector[n] = fx;
+   vic->arg[n] = arg;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void vicIRQ(unsigned int n, void* _vic)
+{
+   VIC* vic = (VIC*) _vic;
+   unsigned long status = VICIRQSTATUS(vic);
+   unsigned int i = 0;
 
    while (status)
    {
       if (status & 1)
       {
-         if (vector[i] != NULL)
-            vector[i](i);
+         if (vic->vector[i] != NULL)
+            vic->vector[i](i, vic->arg[i]);
          else
-            puts("unhandled irq interrupt");
+            puts("unhandled irq");
       }
 
       status >>= 1;
@@ -118,31 +120,7 @@ void _irqVector()
 /****************************************************************************
  *
  ****************************************************************************/
-void irqHandler(uint8_t n, void (*fx)(uint8_t), bool edge, uint8_t cpuMask)
+void vicInit(VIC* vic)
 {
-   if (n > 32)
-   {
-#if SIQ_IRQ
-      sicHandler(n - 32, fx);
-#endif
-   }
-   else
-   {
-      if (fx != NULL)
-         VICINTENABLE |= 1 << n;
-      else
-         VICINTENABLE &= ~(1 << n);
-
-      vector[n] = fx;
-   }
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-void irqInit()
-{
-#if SIQ_IRQ
-   sicInit(SIQ_IRQ);
-#endif
+   vic->ctrl.addHandler = addHandler;
 }

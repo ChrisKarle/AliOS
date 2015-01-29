@@ -30,60 +30,73 @@
 #
 ##############################################################################
 PROJECT = AliOS
-CROSS_COMPILE = avr-
 
 ##############################################################################
 #
 ##############################################################################
+QEMU_ARGS = -M vexpress-a9 -m 128M -nographic -smp 2 -kernel $(BIN_FILE)
+
+##############################################################################
+#
+##############################################################################
+CROSS_COMPILE = arm-none-eabi-
+
+##############################################################################
+#
+##############################################################################
+BIN_FILE = $(PROJECT).bin
 ELF_FILE = $(PROJECT).elf
 MAP_FILE = $(PROJECT).map
+LD_FILE = $(PROJECT).ld
 
 ##############################################################################
 #
 ##############################################################################
 .PHONY: all
-all: $(ELF_FILE)
+all: $(BIN_FILE)
 
 ##############################################################################
 #
 ##############################################################################
-.PHONY: run simavr_clean
+.PHONY: run debug
 
-./simavr/simavr:
-	cd simavr && make
+run: $(BIN_FILE)
+	qemu-system-arm $(QEMU_ARGS)
 
-simavr_clean:
-	cd simavr && make clean
-
-run: $(ELF_FILE) ./simavr/simavr
-	./simavr/simavr $(ELF_FILE)
+debug: $(BIN_FILE)
+	qemu-system-arm $(QEMU_ARGS) -s -S
 
 ##############################################################################
 #
 ##############################################################################
-C_FLAGS = -Wall -Os -mmcu=atmega1280 -fpack-struct -std=c99 -DF_CPU=8000000
-LD_FLAGS = -mmcu=atmega1280 -Wl,-Map=$(MAP_FILE)
+C_FLAGS = -Wall -Wno-main -Wno-address -Os -mcpu=cortex-a9 -DSMP=2
+LD_FLAGS = -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I.
 C_FILES = board.c
+S_FILES = board_smp.S
+
+#   C_FLAGS += -mcpu=cortex-a9 -DTIMER_BASE=0x10011000 -DTIMER_IRQ=34 \
+#              -DUART_BASE=0x10009000 -DUART_IRQ=37 -DSMP=2
 
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../platform/avr-gcc
-C_FILES += platform.c libc_glue.c
-S_FILES = platform_asm.S
-
-##############################################################################
-#
-##############################################################################
-VPATH += ../../drivers/uart
-C_FILES += avr_uart0.c
+VPATH += ../../platform/arm-gcc
+C_FILES += platform.c gic.c libc_glue.c
+S_FILES += platform_asm.S
 
 ##############################################################################
 #
 ##############################################################################
 VPATH += ../../kernel
 C_FILES += kernel.c shell.c
+
+##############################################################################
+#
+##############################################################################
+VPATH += ../../drivers/uart
+VPATH += ../../drivers/timer
+C_FILES += pl011.c sp804.c
 
 ##############################################################################
 #
@@ -101,6 +114,9 @@ OBJ_FILES += $(S_FILES:%.S=%.o)
 DEP_FILES = $(C_FILES:%.c=%.d)
 DEP_FILES += $(S_FILES:%.S=%.d)
 
+$(BIN_FILE): $(ELF_FILE)
+	$(CROSS_COMPILE)objcopy -O binary $< $@
+
 $(ELF_FILE): $(OBJ_FILES)
 	$(CROSS_COMPILE)gcc -o $@ $(OBJ_FILES) $(LD_FLAGS)
 
@@ -113,8 +129,8 @@ $(ELF_FILE): $(OBJ_FILES)
 	$(CROSS_COMPILE)gcc -D__ASM__ $(C_FLAGS) $(INCLUDES) -c -o $@ $<
 
 .PHONY: clean obj_clean dep_clean
-clean: obj_clean dep_clean simavr_clean
-	rm -f $(ELF_FILE) $(MAP_FILE)
+clean: obj_clean dep_clean
+	rm -f $(BIN_FILE) $(ELF_FILE) $(MAP_FILE)
 obj_clean:
 	rm -f $(OBJ_FILES)
 dep_clean:

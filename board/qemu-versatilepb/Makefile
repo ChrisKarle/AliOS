@@ -29,18 +29,13 @@
 ##############################################################################
 #
 ##############################################################################
-MACHINE = versatilepb
-#MACHINE = vexpress-a9
 PROJECT = AliOS
 
 ##############################################################################
 #
 ##############################################################################
-QEMU_ARGS = -M $(MACHINE) -m 128M -nographic -kernel $(BIN_FILE)
+QEMU_ARGS = -M versatilepb -m 128M -nographic -kernel $(BIN_FILE)
 #            -net user -net nic,model=smc91c111 -net dump
-ifeq ($(MACHINE),vexpress-a9)
-   QEMU_ARGS += -smp 2
-endif
 
 ##############################################################################
 #
@@ -53,7 +48,7 @@ CROSS_COMPILE = arm-none-eabi-
 BIN_FILE = $(PROJECT).bin
 ELF_FILE = $(PROJECT).elf
 MAP_FILE = $(PROJECT).map
-LD_FILE = $(MACHINE).ld
+LD_FILE = $(PROJECT).ld
 
 ##############################################################################
 #
@@ -75,31 +70,17 @@ debug: $(BIN_FILE)
 ##############################################################################
 #
 ##############################################################################
-C_FLAGS = -Wall -Wno-main -Wno-address -Os
+C_FLAGS = -Wall -Wno-main -Wno-address -g -mcpu=arm926ej-s
 LD_FLAGS = -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I.
-C_FILES = board.c uart.c libc_glue.c
+C_FILES = board.c
 S_FILES =
-
-ifeq ($(MACHINE),versatilepb)
-   C_FLAGS += -mcpu=arm926ej-s -DTIMER_BASE=0x101E2000 -DTIMER_IRQ=4 \
-              -DUART_BASE=0x101F1000 -DUART_IRQ=12 -DSIQ_IRQ=31
-else ifeq ($(MACHINE),vexpress-a9)
-   C_FLAGS += -mcpu=cortex-a9 -DTIMER_BASE=0x10011000 -DTIMER_IRQ=34 \
-              -DUART_BASE=0x10009000 -DUART_IRQ=37 -DSMP=2
-   S_FILES += board_smp.S
-endif
 
 ##############################################################################
 #
 ##############################################################################
 VPATH += ../../platform/arm-gcc
-C_FILES += platform.c
-ifeq ($(MACHINE),versatilepb)
-   C_FILES += vic.c sic.c
-else ifeq ($(MACHINE),vexpress-a9)
-   C_FILES += gic.c
-endif
+C_FILES += platform.c vic.c sic.c libc_glue.c
 S_FILES += platform_asm.S
 
 ##############################################################################
@@ -111,15 +92,15 @@ C_FILES += kernel.c shell.c
 ##############################################################################
 #
 ##############################################################################
-ifeq ($(MACHINE),versatilepb)
-   include ../../lwip/Makefile.inc
-endif
+VPATH += ../../drivers/uart
+VPATH += ../../drivers/timer
+VPATH += ../../drivers/net
+C_FILES += pl011.c sp804.c lan91c.c
 
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../tests
-C_FILES += timer_test.c queue_test.c semaphore_test.c mutex_test.c
+include ../../lwip/Makefile.inc
 
 ##############################################################################
 #

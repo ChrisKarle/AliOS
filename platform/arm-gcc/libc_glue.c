@@ -1,12 +1,36 @@
 /****************************************************************************
+ * Copyright (c) 2014, Christopher Karle
+ * All rights reserved.
  *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *   - Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *   - Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer in the
+ *     documentation and/or other materials provided with the distribution.
+ *   - Neither the name of the author nor the names of its contributors may be
+ *     used to endorse or promote products derived from this software without
+ *     specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER, AUTHOR OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
-#include "board.h"
+#include "kernel.h"
 #include "platform.h"
 #include "uart.h"
 
@@ -21,11 +45,12 @@ extern uint8_t __bss_end__[];
  ****************************************************************************/
 static Mutex mutex = MUTEX_CREATE("malloc");
 static uint8_t* heap = __bss_end__;
+static UART* uart = NULL;
 
 /****************************************************************************
  *
  ****************************************************************************/
-void __malloc_lock(struct _reent* _r)
+void WEAK __malloc_lock(struct _reent* _r)
 {
    if (interruptsEnabled())
       mutexLock(&mutex, -1);
@@ -36,7 +61,7 @@ void __malloc_lock(struct _reent* _r)
 /****************************************************************************
  *
  ****************************************************************************/
-void __malloc_unlock(struct _reent* _r)
+void WEAK __malloc_unlock(struct _reent* _r)
 {
    if (interruptsEnabled())
       mutexUnlock(&mutex);
@@ -47,7 +72,7 @@ void __malloc_unlock(struct _reent* _r)
 /****************************************************************************
  *
  ****************************************************************************/
-ssize_t _write(int fd, const void* buffer, size_t count)
+ssize_t WEAK _write(int fd, const void* buffer, size_t count)
 {
    size_t i;
 
@@ -62,9 +87,9 @@ ssize_t _write(int fd, const void* buffer, size_t count)
       int c = ((const uint8_t*) buffer)[i];
 
       if (c == '\n')
-         uartTx('\r');
+         uart->tx(uart, '\r');
 
-      uartTx(c);
+      uart->tx(uart, c);
    }
 
    return (ssize_t) count;
@@ -73,7 +98,7 @@ ssize_t _write(int fd, const void* buffer, size_t count)
 /****************************************************************************
  *
  ****************************************************************************/
-ssize_t _read(int fd, void* buffer, size_t count)
+ssize_t WEAK _read(int fd, void* buffer, size_t count)
 {
    size_t i;
 
@@ -85,7 +110,7 @@ ssize_t _read(int fd, void* buffer, size_t count)
 
    for (i = 0; i < count; i++)
    {
-      int c = uartRx(i ? false : true);
+      int c = uart->rx(uart, i ? false : true);
 
       if (c == EOF)
          break;
@@ -102,7 +127,7 @@ ssize_t _read(int fd, void* buffer, size_t count)
 /****************************************************************************
  *
  ****************************************************************************/
-void* _sbrk(intptr_t increment)
+void* WEAK _sbrk(intptr_t increment)
 {
    uint8_t* ptr = heap;
 
@@ -120,7 +145,7 @@ void* _sbrk(intptr_t increment)
 /****************************************************************************
  *
  ****************************************************************************/
-int _close(int fd)
+int WEAK _close(int fd)
 {
    switch (fd)
    {
@@ -137,7 +162,7 @@ int _close(int fd)
 /****************************************************************************
  *
  ****************************************************************************/
-int _fstat(int fd, struct stat* ptr)
+int WEAK _fstat(int fd, struct stat* ptr)
 {
    switch (fd)
    {
@@ -155,7 +180,7 @@ int _fstat(int fd, struct stat* ptr)
 /****************************************************************************
  *
  ****************************************************************************/
-off_t _lseek(int fd, off_t offset, int whence)
+off_t WEAK _lseek(int fd, off_t offset, int whence)
 {
    switch (fd)
    {
@@ -175,7 +200,7 @@ off_t _lseek(int fd, off_t offset, int whence)
 /****************************************************************************
  *
  ****************************************************************************/
-int _isatty(int fd)
+int WEAK _isatty(int fd)
 {
    switch (fd)
    {
@@ -192,6 +217,7 @@ int _isatty(int fd)
 /****************************************************************************
  *
  ****************************************************************************/
-void libcInit()
+void WEAK libcInit(UART* _uart)
 {
+   uart = _uart;
 }

@@ -62,6 +62,20 @@
 #define CPU_F_BIT           0x40
 #define CPU_I_BIT           0x80
 
+/****************************************************************************
+ *
+ ****************************************************************************/
+#define NORETURN __attribute__((noreturn))
+#define WEAK __attribute__((weak))
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+#define PACK_STRUCT_FIELD(x) x
+#define PACK_STRUCT_STRUCT __attribute__((packed))
+#define PACK_STRUCT_BEGIN
+#define PACK_STRUCT_END
+
 #ifndef __ASM__
 /****************************************************************************
  *
@@ -72,22 +86,20 @@
 /****************************************************************************
  *
  ****************************************************************************/
-#define NORETURN __attribute__((noreturn))
+typedef struct _IrqCtrl
+{
+   void (*addHandler)(struct _IrqCtrl* ctrl, unsigned int n,
+                      void (*fx)(unsigned int, void*), void* arg, bool edge,
+                      unsigned int cpuMask);
 
-/****************************************************************************
- *
- ****************************************************************************/
-#define PACK_STRUCT_FIELD(x) x
-#define PACK_STRUCT_STRUCT __attribute__((packed))
-#define PACK_STRUCT_BEGIN
-#define PACK_STRUCT_END
+} IrqCtrl;
 
 /****************************************************************************
  *
  ****************************************************************************/
 static inline bool interruptsEnabled()
 {
-   uint32_t cpsr;
+   unsigned long cpsr;
    __asm__ __volatile__("mrs %0, CPSR" : "=r" (cpsr));
    return (cpsr & CPU_I_BIT) ? false : true;
 }
@@ -97,7 +109,7 @@ static inline bool interruptsEnabled()
  ****************************************************************************/
 static inline void enableInterrupts()
 {
-   uint32_t cpsr;
+   unsigned long cpsr;
    __asm__ __volatile__("mrs %0, CPSR" : "=r" (cpsr));
    __asm__ __volatile__("msr CPSR, %0" : : "r" (cpsr & ~CPU_I_BIT));
 }
@@ -107,23 +119,10 @@ static inline void enableInterrupts()
  ****************************************************************************/
 static inline bool disableInterrupts()
 {
-   uint32_t cpsr;
+   unsigned long cpsr;
    __asm__ __volatile__("mrs %0, CPSR" : "=r" (cpsr));
    __asm__ __volatile__("msr CPSR, %0" : : "r" (cpsr | CPU_I_BIT));
    return (cpsr & CPU_I_BIT) ? false : true;
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-static inline void cpuSleep()
-{
-#ifdef SMP
-   __asm__ __volatile__("wfi");
-#else
-   uint32_t unused;
-   __asm__ __volatile__("mcr p15, 0, %0, c7, c0, 4" : "=r" (unused));
-#endif
 }
 
 /****************************************************************************
@@ -142,142 +141,62 @@ static inline int cpuID()
 
 #ifdef SMP
 /****************************************************************************
- * Function: cpuIRQ
- *    - send interrupt to other CPUs
- * Arguments:
- *    cpu - CPU id to interrupt (-1 == all CPUs (excluding current))
- *    n   - interrupt ID
- ****************************************************************************/
-void cpuIRQ(int cpu, uint8_t n);
-
-/****************************************************************************
- * Function: testAndSet
- *    - perform an atomic test and set
- * Arguments:
- *    ptr - pointer to value to update
- *    a   - expected value
- *    b   - new value
+ *
  ****************************************************************************/
 void testAndSet(unsigned int* ptr, unsigned int a, unsigned int b);
 #endif
 
 /****************************************************************************
- * Function: irqHandler
- *    - install an IRQ handler
- * Arguments:
- *    n       - IRQ number
- *    fx      - pointer to IRQ callback
- *    edge    - true if edge, false if level sensitive (if supported)
- *    cpuMask - which processor(s) should receive this interrupt
- *              0b00000001 -> CPU 0
- *              0b00000010 -> CPU 1
- *              etc...
- *              (if supported)
- ****************************************************************************/
-void irqHandler(uint8_t n, void (*fx)(uint8_t), bool edge, uint8_t cpuMask);
-
-/****************************************************************************
- * Function: irqInit
- *    - initialize IRQs
- ****************************************************************************/
-void irqInit();
-
-/****************************************************************************
- * Function: _kernelLock
- *    - locks the kernel from within an interrupt context
- * Notes:
- *    - called by _taskTick() & _taskPreempt()
+ *
  ****************************************************************************/
 void _kernelLock();
 
 /****************************************************************************
- * Function: _kernelUnlock
- *    - unlocks the kernel from within an interrupt context
- * Notes:
- *    - called by _taskTick() & _taskPreempt()
+ *
  ****************************************************************************/
 void _kernelUnlock();
 
 /****************************************************************************
- * Function: kernelLock
- *    - locks the kernel
- * Notes:
- *    - must be able to be called from within an interrupt context
+ *
  ****************************************************************************/
 void kernelLock();
 
 /****************************************************************************
- * Function: kernelUnlock
- *    - unlocks the kernel
- * Notes:
- *    - must be able to be called from within an interrupt context
+ *
  ****************************************************************************/
 void kernelUnlock();
 
 /****************************************************************************
- * Function: taskSetup
- *    - initialize a task for execution
- * Arguments:
- *    task - task to use
- *    fx   - pointer to task function
- *    arg1 - first argument to pass to task function
- *    arg2 - second argument to pass to task function
+ *
  ****************************************************************************/
 void taskSetup(Task* task, void (*fx)(void*, void*), void* arg1, void* arg2);
 
 #if TASK_STACK_USAGE
 /****************************************************************************
- * Function: taskStackUsage
- *    - compute the amount of stack usage for a task
- * Arguments:
- *    task - task to use
- * Returns:
- *    - number of bytes of stack in use
- * Notes:
- *    - uses a stack marker to determine the amount of stack used up to when
- *      this function is called
+ *
  ****************************************************************************/
 unsigned long taskStackUsage(Task* task);
 #endif
 
 /****************************************************************************
- * Function: _taskEntry
- *    - callback before task is executed for the first time
- * Arguments:
- *    task - task about to run
- * Notes:
- *    - the task is "technically" executing but has yet to call the task
- *      function
+ *
  ****************************************************************************/
 void _taskEntry(Task* task);
 
 /****************************************************************************
- * Function: _taskExit
- *    - callback after a task has exited
- * Arguments:
- *    task - task that exited
- * Notes:
- *    - the resources associated with the task are no longer in use
+ *
  ****************************************************************************/
 void _taskExit(Task* task);
 
 /****************************************************************************
- * Function: _taskSwitch
- *    - context switch between tasks
- * Arguments:
- *    current - current task executing
- *    next    - next task to execute
+ *
  ****************************************************************************/
 void _taskSwitch(Task* current, Task* next);
 
 /****************************************************************************
- * Function: _taskInit
- *    - initialize platform task stuff and "main" task
- * Arguments:
- *    task      - task container for "main" task
- *    stackBase - base/bottom of stack
- *    stackSize - size of stack
+ *
  ****************************************************************************/
 void _taskInit(Task* task, void* stackBase, unsigned long stackSize);
 #endif
+
 #endif

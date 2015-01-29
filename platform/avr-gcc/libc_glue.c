@@ -25,36 +25,54 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#ifndef VIC_H
-#define VIC_H
-
-#include "platform.h"
-
-/****************************************************************************
- *
- ****************************************************************************/
-#define VIC_CREATE(base) {{}, base, {}, {}}
+#include <stdio.h>
+#include "libc_glue.h"
+#include "uart.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-typedef struct
+static UART* uart = NULL;
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static int _fputc(char c, FILE* stream)
 {
-   IrqCtrl ctrl;
-   unsigned long base;
-   void (*vector[32])(unsigned int, void*);
-   void* arg[32];
+   if (c == '\n')
+      uart->tx(uart, '\r');
 
-} VIC;
+   uart->tx(uart, c);
 
-/****************************************************************************
- *
- ****************************************************************************/
-void vicIRQ(unsigned int n, void* vic);
+   return 0;
+}
 
 /****************************************************************************
  *
  ****************************************************************************/
-void vicInit(VIC* vic);
+static int _fgetc(FILE* stream)
+{
+   int c = uart->rx(uart, true);
 
-#endif
+   if (c == '\r')
+      c = '\n';
+
+   return c;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static FILE _stdin = FDEV_SETUP_STREAM(NULL, _fgetc, _FDEV_SETUP_READ);
+static FILE _stdout = FDEV_SETUP_STREAM(_fputc, NULL, _FDEV_SETUP_WRITE);
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void libcInit(UART* _uart)
+{
+   uart = _uart;
+   stdin = &_stdin;
+   stdout = &_stdout;
+   stderr = &_stdout;
+}

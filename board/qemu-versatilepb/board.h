@@ -25,175 +25,61 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#include <avr/cpufunc.h>
-#include <avr/interrupt.h>
-#include <avr/io.h>
-#include <avr/sleep.h>
-#include <stdio.h>
-#include "avr_uart0.h"
-#include "board.h"
-#include "kernel.h"
-#include "libc_glue.h"
-#include "mutex_test.h"
-#include "queue_test.h"
-#include "semaphore_test.h"
-#include "shell.h"
-#include "timer_test.h"
+#ifndef BOARD_H
+#define BOARD_H
+
+/****************************************************************************
+ * see QEMU_ARGS in Makefile before changing
+ ****************************************************************************/
+#define BOARD_MEM_SIZE (128 * 1024 * 1024)
+
+/****************************************************************************
+ * Note: Task preemption is rarely needed.
+ ****************************************************************************/
+#define TASK_PREEMPTION  0
+#define TASK_LIST        1
+#define TASK_STACK_USAGE 1
+#define TASK0_STACK_SIZE 2048
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define DYNAMIC_TICK 1
+#define TASK_HIGH_PRIORITY  0
+#define TASK_LOW_PRIORITY   1
+#define TASK_NUM_PRIORITIES 2
+
+/****************************************************************************
+ * (maximum) number of ticks per second
+ ****************************************************************************/
+#define TASK_TICK_HZ 1000
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void taskListCmd(int argc, char* argv[])
-{
-   taskList();
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-static const ShellCmd SHELL_CMDS[] =
-{
-   {"tl", taskListCmd},
-   {"mutex_test", mutexTestCmd},
-   {"queue_test", queueTestCmd},
-   {"semaphore_test", semaphoreTestCmd},
-   {"timer_test", timerTestCmd},
-   {NULL, NULL}
-};
-
-/****************************************************************************
- *
- ****************************************************************************/
-extern uint8_t __stack[];
-static Task task;
-static UART uart;
-
-/****************************************************************************
- *
- ****************************************************************************/
-void taskTimer(unsigned long ticks)
-{
-#if DYNAMIC_TICK
-   if (ticks > 15)
-   {
-      if (ticks > 31)
-         OCR2A = F_CPU / 1000 / 64 * 2;
-      else
-         OCR2A = F_CPU / 1000 / 64;
-
-      TCCR2B = 0x07;
-   }
-   else if (ticks > 3)
-   {
-      if (ticks > 7)
-         OCR2A = F_CPU / 1000 / 64 * 2;
-      else
-         OCR2A = F_CPU / 1000 / 64;
-
-      TCCR2B = 0x06;
-   }
-   else if (ticks > 1)
-   {
-      OCR2A = F_CPU / 1000 / 64;
-      TCCR2B = 0x05;
-   }
-   else if (ticks > 0)
-   {
-      OCR2A = F_CPU / 1000 / 64;
-      TCCR2B = 0x04;
-   }
-   else
-   {
-      TCCR2B = 0x00;
-   }
-
-   TCNT2 = 0;
-#endif
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-void taskWait()
-{
-   cli();
-   sleep_enable();
-   sei();
-   sleep_cpu();
-   sleep_disable();
-   _NOP();
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-ISR(TIMER2_COMPA_vect)
-{
-   unsigned long ticks = 1;
-
-#if DYNAMIC_TICK
-   switch (TCCR2B)
-   {
-      case 0x07:
-         if (OCR2A > (F_CPU / 1000 / 64))
-            ticks = 32;
-         else
-            ticks = 16;
-         break;
-
-      case 0x06:
-         if (OCR2A > (F_CPU / 1000 / 64))
-            ticks = 8;
-         else
-            ticks = 4;
-         break;
-
-      case 0x05:
-         ticks = 2;
-         break;
-   }
+#if TASK_PREEMPTION
+#define taskPreempt(f) _taskPreempt(f)
+#else
+#define taskPreempt(f)
 #endif
 
-   _taskTick(ticks);
+#ifndef __ASM__
+#include <stdlib.h>
 
-   taskPreempt(false);
-}
+/****************************************************************************
+ * allow the kernel to use malloc/free
+ ****************************************************************************/
+#define kmalloc malloc
+#define kfree free
 
 /****************************************************************************
  *
  ****************************************************************************/
-int main()
-{
-   void* stackBase = __stack - TASK0_STACK_SIZE + 1;
+void taskTimer(unsigned long ticks);
 
-   taskInit(&task, "main", TASK_LOW_PRIORITY, stackBase, TASK0_STACK_SIZE);
-   uart0Init(&uart);
-   libcInit(&uart);
-
-   /* timer2 default tick (1ms) */
-   OCR2A = F_CPU / 1000 / 64;
-   TCCR2A = 0x02;
-#if !DYNAMIC_TICK
-   TCCR2B = 0x04;
+/****************************************************************************
+ *
+ ****************************************************************************/
+void taskWait();
 #endif
-   TIMSK2 = 0x02;
 
-   set_sleep_mode(SLEEP_MODE_IDLE);
-
-   puts("AliOS on AVR");
-   sei();
-
-   mutexTest();
-   queueTest();
-   semaphoreTest();
-   timerTest();
-
-   shellRun(SHELL_CMDS);
-
-   return 0;
-}
+#endif
