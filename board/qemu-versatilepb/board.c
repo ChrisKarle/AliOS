@@ -31,6 +31,7 @@
 #include "kernel.h"
 #include "lan91c.h"
 #include "libc_glue.h"
+#include "lwip/tcpip.h"
 #include "pl011.h"
 #include "shell.h"
 #include "sic.h"
@@ -153,6 +154,8 @@ int main(void* stack, unsigned long size)
 
    lan91cInit(&lan91c, &ip, &netmask, &gateway, true);
    sic.ctrl.addHandler(&sic.ctrl, 25, lan91cIRQ, &lan91c, false, 1);
+
+   tcpip_init(NULL, NULL);
 
    puts("AliOS on ARM");
    enableInterrupts();
