@@ -32,33 +32,32 @@
  *
  ****************************************************************************/
 #include <stdbool.h>
-#include <stdint.h>
 #include "board.h"
 
 /****************************************************************************
  * Macro: TASK_CREATE
- *    - create a static task container
+ *    - Creates a statically allocated task container.
  * Arguments:
- *    name      - name of task
- *    stackSize - stack size
+ *    name      - name of task (must be const, non-local pointer)
+ *    stackSize - stack size in bytes
  ****************************************************************************/
-#define TASK_CREATE(name, stackSize)           \
-{                                              \
-   name,                                       \
-   TASK_STATE_END,                             \
-   0,                                          \
-   0,                                          \
-   {},                                         \
-   {stackSize, (uint8_t[stackSize]) {}, NULL}, \
-   NULL                                        \
+#define TASK_CREATE(name, stackSize)                 \
+{                                                    \
+   name,                                             \
+   TASK_STATE_END,                                   \
+   0,                                                \
+   0,                                                \
+   {},                                               \
+   {stackSize, (unsigned char[stackSize]) {}, NULL}, \
+   NULL                                              \
 }
 
 /****************************************************************************
  * Macro: TASK_CREATE_PTR
- *    - create a static pointer to a task container
+ *    - Gets a pointer to a statically allocated task container.
  * Arguments:
- *    name      - name of task
- *    stackSize - stack size
+ *    name      - name of task (must be const, non-local pointer)
+ *    stackSize - stack size in bytes
  ****************************************************************************/
 #define TASK_CREATE_PTR(name, stackSize) \
    ((Task[1]) {TASK_CREATE(name, stackSize)})
@@ -114,10 +113,10 @@ typedef struct _Task
 #ifdef kmalloc
 /****************************************************************************
  * Function: taskCreate
- *    - dynamically create a new task container
+ *    - Dynamically creates a new task container.
  * Arguments:
- *    name       - name of task
- *    stackSize  - stack size
+ *    name       - name of task (must be const, non-local pointer)
+ *    stackSize  - stack size in bytes
  *    freeOnExit - free task container on task exit
  * Returns:
  *    - pointer to initialized task container
@@ -127,7 +126,7 @@ Task* taskCreate(const char* name, unsigned long stackSize, bool freeOnExit);
 
 /****************************************************************************
  * Function: _taskStart
- *    - start a new task
+ *    - Starts a new task.
  * Arguments:
  *    task     - task container to use
  *    fx       - pointer to task function
@@ -136,15 +135,15 @@ Task* taskCreate(const char* name, unsigned long stackSize, bool freeOnExit);
  * Returns:
  *    - true if successful, false otherwise
  * Notes:
- *    - task container must be in the TASK_STATE_END state
- *    - interrupt context safe / does not yield
+ *    - Task container must be in the TASK_STATE_END state.
+ *    - Interrupt context safe / Does not yield.
  ****************************************************************************/
 bool _taskStart(Task* task, void (*fx)(void*), void* arg,
                 unsigned char priority);
 
 /****************************************************************************
- * Function: taskStart
- *    - start a new task
+ * Function: _taskStart
+ *    - Starts a new task.
  * Arguments:
  *    task     - task container to use
  *    fx       - pointer to task function
@@ -153,54 +152,54 @@ bool _taskStart(Task* task, void (*fx)(void*), void* arg,
  * Returns:
  *    - true if successful, false otherwise
  * Notes:
- *    - task container must be in the TASK_STATE_END state
- *    - will yield current task if new task is higher in priority
- *    - NOT interrupt context safe
+ *    - Task container must be in the TASK_STATE_END state.
+ *    - Will yield current task if new task is higher in priority.
+ *    - NOT interrupt context safe.
  ****************************************************************************/
 bool taskStart(Task* task, void (*fx)(void*), void* arg,
                unsigned char priority);
 
 /****************************************************************************
  * Function: _taskPreempt
- *    - preempt the current task
+ *    - Preempts the current task.
  * Arguments:
  *    flag - true = preempt if current level priority (or higher) task ready
  *           false = preempt only if higher priority task is ready
  * Notes:
- *    - MUST be called from interrupt context
+ *    - MUST be called from interrupt context.
  ****************************************************************************/
 void _taskPreempt(bool flag);
 
 /****************************************************************************
  * Macro: taskYield
- *    - yield the current task
+ *    - Yields the current task.
  * Notes:
- *    - yields the current task and runs the next available task of any
- *      priority
- *    - if no other task is ready, returns immediately
- *    - NOT interrupt context safe
+ *    - Yields the current task and runs the next available task of any
+ *      priority.
+ *    - If no other task is ready, returns immediately.
+ *    - NOT interrupt context safe.
  ****************************************************************************/
 #define taskYield() taskSleep(0)
 
 /****************************************************************************
  * Function: taskSleep
- *    - sleep the current task for a duration
+ *    - Sleeps the current task for a duration.
  * Arguments:
  *    ticks - number of system ticks to sleep
  * Notes:
- *    - NOT interrupt context safe
+ *    - NOT interrupt context safe.
  ****************************************************************************/
 void taskSleep(unsigned long ticks);
 
 /****************************************************************************
  * Function: taskPriority
- *    - change the priority of a task
+ *    - Changes the priority of a task.
  * Arguments:
  *    task     - task to change priority (NULL changes current task)
- *    priority - new priority to set
+ *    priority - new priority
  * Notes:
- *    - may yield current task
- *    - NOT interrupt context safe
+ *    - May yield current task.
+ *    - NOT interrupt context safe.
  ****************************************************************************/
 void taskPriority(Task* task, unsigned char priority);
 
@@ -221,47 +220,46 @@ void taskPriority(Task* task, unsigned char priority);
 #if TASK_LIST
 /****************************************************************************
  * Function: taskList
- *    - dumps task information to stdout
+ *    - Dumps task information via printf().
  * Notes:
- *    - locks the kernel for an insanely long time
- *    - requires printf which usually consumes a fair amount of ROM
- *    - can be useful for debugging
+ *    - Locks the kernel for an insanely long time.
+ *    - Requires printf() which usually consumes a fair amount of ROM.
+ *    - Can be useful for debugging.
  ****************************************************************************/
 void taskList();
 #endif
 
 /****************************************************************************
  * Function: taskExit
- *    - ends execution of the current task
+ *    - Ends execution of the current task.
  * Notes:
- *    - it is NOT required to call this function at the end of the task
- *      function (it will be automatically called when the task function
- *      exits)
- *    - NOT interrupt context safe
+ *    - It is NOT required to call this function at the end of the task
+ *      function.  It will be automatically called when the task function
+ *      exits.
+ *    - NOT interrupt context safe.
  ****************************************************************************/
 void taskExit();
 
 /****************************************************************************
  * Function: _taskTick
- *    - advance the kernel so many system ticks
+ *    - Advances the kernel so many system ticks.
  * Arguments:
  *    ticks - number of ticks that have passed
  * Notes:
- *    - this must be called to advance sleep timers, timeouts, and other
- *      timers
- *    - MUST be called from interrupt context
+ *    - This must be called to advance timeouts and timers.
+ *    - MUST be called from interrupt context.
  ****************************************************************************/
 void _taskTick(unsigned long ticks);
 
 /****************************************************************************
  * Function: taskInit
- *    - initialize kernel's tasking system & "main" task
+ *    - Initializes the kernel's tasking system & "main" task.
  * Arguments:
- *    task      - *uninitialized* task container for "main"
+ *    task      - UNINITITIALIZED task container for "main"
  *    name      - name of "main" task
  *    priority  - priority to assign to "main" task
  *    stackBase - base/bottom of stack
- *    stackSize - size of stack
+ *    stackSize - size of stack in bytes
  ****************************************************************************/
 void taskInit(Task* task, const char* name, unsigned char priority,
               void* stackBase, unsigned long stackSize);
@@ -276,14 +274,16 @@ void taskInit(Task* task, const char* name, unsigned char priority,
 #if TIMERS
 /****************************************************************************
  * Macro: TIMER_CREATE
- *    - create a statically allocated timer
+ *    - Creates a statically allocated timer.
  * Arguments:
  *    name  - name of task
  *    flags - see below
  * Notes:
- *    - When the timer expires, the kernel will try to start the task.  If
- *      there is a currently executing task for the task container, the
- *      kernel will try to run the timer again on the next system tick.
+ *    - ASYNC timers run within the interrupt context, so exercise caution.
+ *    - When a non-ASYNC timer expires, the kernel will try to start the
+ *      assigned task.  If there is a currently executing task for the task
+ *      container, the kernel will try to run the task again on the next
+ *      system tick.
  ****************************************************************************/
 #define TIMER_CREATE(name, flags) \
 {                                 \
@@ -299,7 +299,7 @@ void taskInit(Task* task, const char* name, unsigned char priority,
 
 /****************************************************************************
  * Macro: TIMER_CREATE_PTR
- *    - create a pointer to a statically allocated timer
+ *    - Gets a pointer to a statically allocated timer.
  * Arguments:
  *    name  - name of task
  *    flags - see below
@@ -341,14 +341,14 @@ typedef struct _Timer
 #ifdef kmalloc
 /****************************************************************************
  * Function: timerCreate
- *    - dynamically allocate a new timer
+ *    - Dynamically allocates a new timer.
  * Arguments:
  *    name  - name of timer
  *    flags - see timer flags above
  * Returns:
  *    - pointer to initialized timer structure
  * Notes:
- *    - must be destroyed with timerDestroy()
+ *    - Must be destroyed with timerDestroy().
  ****************************************************************************/
 Timer* timerCreate(const char* name, unsigned char flags);
 #endif
@@ -356,18 +356,18 @@ Timer* timerCreate(const char* name, unsigned char flags);
 #ifdef kfree
 /****************************************************************************
  * Function: timerDestroy
- *    - destroy/free a previously allocated timer
+ *    - Destroys/frees a previously dynamically allocated timer.
  * Arguments:
  *    timer - timer previously allocated with timerCreate()
  * Notes:
- *    - cannot be called on an active timer
+ *    - Must not be called on an active timer.
  ****************************************************************************/
 void timerDestroy(Timer* timer);
 #endif
 
 /****************************************************************************
  * Function: timerAdd
- *    - schedule a timer
+ *    - Schedules a timer.
  * Arguments:
  *    timer    - timer container to use
  *    task     - task container to run timer task on
@@ -378,18 +378,18 @@ void timerDestroy(Timer* timer);
  *    priority - priority of timer task (ignored for async timers)
  *    ticks    - number of ticks for timer
  * Notes:
- *    - may be called from interrupt context
+ *    - May be called from interrupt context.
  ****************************************************************************/
 void timerAdd(Timer* timer, Task* task, void (*fx)(void*), void* ptr,
               unsigned char priority, unsigned long ticks);
 
 /****************************************************************************
  * Function: timerCancel
- *    - cancel a timer
+ *    - Cancels a timer.
  * Arguments:
  *    timer - timer to cancel
  * Notes:
- *    - may be called from interrupt context
+ *    - May be called from interrupt context.
  ****************************************************************************/
 void timerCancel(Timer* timer);
 #endif
@@ -404,13 +404,15 @@ void timerCancel(Timer* timer);
 #if QUEUES
 /****************************************************************************
  * Macro: QUEUE_CREATE
- *    - create a queue
+ *    - Creates a statically allocated queue.
  * Arguments:
  *    name        - name of queue
  *    elementSize - size of a single element in bytes
- *    maxElements - maximum number of element in queue
+ *    maxElements - maximum number of elements in queue
  * Notes:
- *    - maxElements of elementSize array is statically allocated
+ *    - maxElements of elementSize array is statically allocated, so use
+ *      caution when creating very large queues or queues of very large
+ *      elements.
  ****************************************************************************/
 #define QUEUE_CREATE(name, elementSize, maxElements) \
 {                                                    \
@@ -419,19 +421,21 @@ void timerCancel(Timer* timer);
    maxElements,                                      \
    0,                                                \
    0,                                                \
-   (uint8_t[elementSize * maxElements]) {},          \
+   (unsigned char[elementSize * maxElements]) {},    \
    NULL                                              \
 }
 
 /****************************************************************************
  * Macro: QUEUE_CREATE_PTR
- *    - create a pointer to a statically allocated queue
+ *    - Gets a pointer to a statically allocated queue.
  * Arguments:
  *    name        - name of queue
  *    elementSize - size of a single element in bytes
- *    maxElements - maximum number of element in queue
+ *    maxElements - maximum number of elements in queue
  * Notes:
- *    - maxElements of elementSize array is statically allocated
+ *    - maxElements of elementSize array is statically allocated, so use
+ *      caution when creating very large queues or queues of very large
+ *      elements.
  ****************************************************************************/
 #define QUEUE_CREATE_PTR(name, elementSize, maxElements) \
    ((Queue[1]) {QUEUE_CREATE(name, elementSize, maxElements)})
@@ -446,7 +450,7 @@ typedef struct
    unsigned int max;
    unsigned int count;
    unsigned int index;
-   uint8_t* buffer;
+   unsigned char* buffer;
    Task* task;
 
 } Queue;
@@ -454,16 +458,17 @@ typedef struct
 #ifdef kmalloc
 /****************************************************************************
  * Function: queueCreate
- *    - dynamically allocate a new queue
+ *    - Dynamically allocates a new queue
  * Arguments:
  *    name        - name of queue
  *    elementSize - size of a single element in bytes
- *    maxElements - maximum number of element in queue
+ *    maxElements - maximum number of elements in queue
  * Returns:
  *    - pointer to initialized queue structure
  * Notes:
- *    - must be destroyed with queueDestroy()
- *    - maxElements of elementSize array is allocated
+ *    - Must be destroyed with queueDestroy().
+ *    - maxElements of elementSize array is allocated, so use caution when
+ *      creating very large queues or queues of very large elements.
  ****************************************************************************/
 Queue* queueCreate(const char* name, unsigned int elementSize,
                    unsigned int maxElements);
@@ -472,80 +477,78 @@ Queue* queueCreate(const char* name, unsigned int elementSize,
 #ifdef kfree
 /****************************************************************************
  * Function: queueDestroy
- *    - destroy/free a previously allocated queue
+ *    - Destroys/frees a previously dynamically allocated queue.
  * Arguments:
  *    queue - queue previously allocated with queueCreate()
  * Notes:
- *    - cannot be called on an active queue
+ *    - Must not be called on an active queue.
  ****************************************************************************/
 void queueDestroy(Queue* queue);
 #endif
 
 /****************************************************************************
  * Function: _queuePush
- *    - add an element to a queue
+ *    - Adds an element to a queue.
  * Arguments:
  *    queue - queue to modify
- *    tail  - add element to the tail of queue (false = head)
+ *    tail  - adds element to the tail of queue (false = head)
  *    src   - pointer to data
  * Returns:
- *    - true if successful / false otherwise
+ *    - true if successful (if space in queue) / false otherwise
  * Notes:
- *    - elementSize bytes of data at src is memory copied into the queue
- *    - interrupt context safe / does not yield
+ *    - elementSize bytes of data at src is memory copied into the queue.
+ *    - Interrupt context safe / Does not yield.
  ****************************************************************************/
 bool _queuePush(Queue* queue, bool tail, const void* src);
 
 /****************************************************************************
  * Function: queuePush
- *    - add an element to a queue
+ *    - Adds an element to a queue.
  * Arguments:
  *    queue - queue to modify
- *    tail  - add element to the tail of queue(false = head)
+ *    tail  - adds element to the tail of queue(false = head)
  *    src   - pointer to data
  *    ticks - number of ticks to wait until queue space becomes available
- *            (-1 = wait forever)
+ *            (-1 == wait forever)
  * Returns:
- *    - true if successful / false otherwise
+ *    - true if successful (if space in queue) / false otherwise
  * Notes:
- *    - elementSize bytes of data at src is memory copied into the queue
- *    - may yield current task
- *    - NOT interrupt context safe
+ *    - elementSize bytes of data at src is memory copied into the queue.
+ *    - NOT interrupt context safe / May yield current task.
  ****************************************************************************/
 bool queuePush(Queue* queue, bool tail, const void* src, unsigned long ticks);
 
 /****************************************************************************
  * Function: _queuePop
- *    - remove an element from a queue
+ *    - Removes an element from a queue.
  * Arguments:
  *    queue - queue to modify
- *    head  - remove element from the head of queue (false = tail)
+ *    head  - removes element from the head of queue (false = tail)
  *    peek  - do not actually remove element... just get a copy
- *    dst   - pointer to destination to write data
+ *    dst   - pointer to write data
  * Returns:
  *    - true if successful / false otherwise
  * Notes:
- *    - elementSize bytes of data copied from the queue to dst
- *    - interrupt context safe / does not yield
+ *    - elementSize bytes of data copied from the queue to dst.
+ *    - Interrupt context safe / Does not yield.
  ****************************************************************************/
 bool _queuePop(Queue* queue, bool head, bool peek, void* dst);
 
 /****************************************************************************
  * Function: queuePop
- *    - remove an element from a queue
+ *    - Removes an element from a queue.
  * Arguments:
  *    queue - queue to modify
- *    head  - remove element from the head of queue (false = tail)
+ *    head  - removes element from the head of queue (false = tail)
  *    peek  - do not actually remove element... just get a copy
- *    dst   - pointer to destination to write data
+ *    dst   - pointer to write data
  *    ticks - number of ticks to wait until element becomes available
- *            (-1 = wait forever)
+ *            (-1 == wait forever)
  * Returns:
  *    - true if successful / false otherwise
  * Notes:
- *    - elementSize bytes of data copied from the queue to dst
- *    - may yield current task
- *    - NOT interrupt context safe
+ *    - elementSize bytes of data copied from the queue to dst.
+ *    - NOT interrupt context safe / May yield current task.
  ****************************************************************************/
 bool queuePop(Queue* queue, bool head, bool peek, void* dst,
              unsigned long ticks);
@@ -561,10 +564,10 @@ bool queuePop(Queue* queue, bool head, bool peek, void* dst,
 #if SEMAPHORES
 /****************************************************************************
  * Macro: SEMAPHORE_CREATE
- *    - create a semaphore
+ *    - Creates a statically allocated semaphore.
  * Arguments:
  *    name  - name of semaphore
- *    count - initial "signal" state of semaphore
+ *    count - initial "signal" count of semaphore
  *    max   - maximum "signal" count of semaphore
  ****************************************************************************/
 #define SEMAPHORE_CREATE(name, count, max) \
@@ -577,10 +580,10 @@ bool queuePop(Queue* queue, bool head, bool peek, void* dst,
 
 /****************************************************************************
  * Macro: SEMAPHORE_CREATE
- *    - create a pointer to a statically allocated semaphore
+ *    - Gets a pointer to a statically allocated semaphore.
  * Arguments:
  *    name  - name of semaphore
- *    count - initial "signal" state of semaphore
+ *    count - initial "signal" count of semaphore
  *    max   - maximum "signal" count of semaphore
  ****************************************************************************/
 #define SEMAPHORE_CREATE_PTR(name, count, max) \
@@ -601,15 +604,15 @@ typedef struct
 #ifdef kmalloc
 /****************************************************************************
  * Function: semaphoreCreate
- *    - dynamically allocate a new semaphore
+ *    - Dynamically allocates a new semaphore.
  * Arguments:
  *    name  - name of semaphore
- *    count - initial "signal" state of semaphore
+ *    count - initial "signal" count of semaphore
  *    max   - maximum "signal" count of semaphore
  * Returns:
  *    - pointer to initialized semaphore
  * Notes:
- *    - must be destroyed with semaphoreDestroy()
+ *    - Must be destroyed with semaphoreDestroy().
  ****************************************************************************/
 Semaphore* semaphoreCreate(const char* name, unsigned int count,
                            unsigned int max);
@@ -618,52 +621,50 @@ Semaphore* semaphoreCreate(const char* name, unsigned int count,
 #ifdef kfree
 /****************************************************************************
  * Function: semaphoreDestroy
- *    - destroy/free a previously allocated semaphore
+ *    - Destroys/frees a previously dynamically allocated semaphore.
  * Arguments:
  *    semaphore - semaphore previously allocated with semaphoreCreate()
  * Notes:
- *    - cannot be called on an active semaphore
+ *    - Must not be called on an active semaphore.
  ****************************************************************************/
 void semaphoreDestroy(Semaphore* semaphore);
 #endif
 
 /****************************************************************************
  * Function: semaphoreTake
- *    - take/consume a semaphore signal
+ *    - Takes/consumes a semaphore signal.
  * Arguments:
  *    semaphore - semaphore to use
  *    ticks     - number of ticks to wait until semaphore becomes available
- *                (-1 = wait forever)
+ *                (-1 == wait forever)
  * Returns:
  *    - true if successful / false otherwise
  * Notes:
- *    - may yield current task
- *    - NOT interrupt context safe
+ *    - NOT interrupt context safe / May yield current task.
  ****************************************************************************/
 bool semaphoreTake(Semaphore* semaphore, unsigned long ticks);
 
 /****************************************************************************
  * Function: _semaphoreGive
- *    - signal a semaphore
+ *    - Signals a semaphore.
  * Arguments:
  *    semaphore - semaphore to use
  * Returns:
  *    - false if more than maximum "signal" count, true otherwise
  * Notes:
- *    - interrupt context safe / does not yield
+ *    - Interrupt context safe / Does not yield.
  ****************************************************************************/
 bool _semaphoreGive(Semaphore* semaphore);
 
 /****************************************************************************
  * Function: semaphoreGive
- *    - signal a semaphore
+ *    - Signals a semaphore.
  * Arguments:
  *    semaphore - semaphore to use
  * Returns:
  *    - false if more than maximum "signal" count, true otherwise
  * Notes:
- *    - may yield current task
- *    - NOT interrupt context safe
+ *    - NOT interrupt context safe / may yield current task.
  ****************************************************************************/
 bool semaphoreGive(Semaphore* semaphore);
 #endif
@@ -678,7 +679,7 @@ bool semaphoreGive(Semaphore* semaphore);
 #if MUTEXES
 /****************************************************************************
  * Macro: MUTEX_CREATE
- *    - create a mutex
+ *    - Creates a statically allocated mutex.
  * Arguments:
  *    name - name of mutex
  ****************************************************************************/
@@ -692,8 +693,8 @@ bool semaphoreGive(Semaphore* semaphore);
 }
 
 /****************************************************************************
- * Macro: MUTEX_CREATE
- *    - create a pointer to a statically allocated mutex
+ * Macro: MUTEX_CREATE_PTR
+ *    - Gets a pointer to a statically allocated mutex.
  * Arguments:
  *    name - name of mutex
  ****************************************************************************/
@@ -715,13 +716,13 @@ typedef struct
 #ifdef kmalloc
 /****************************************************************************
  * Function: mutexCreate
- *    - dynamically allocate a new mutex
+ *    - Dynamically allocates a new mutex.
  * Arguments:
  *    name - name of mutex
  * Returns:
  *    - pointer to initialized mutex
  * Notes:
- *    - must be destroyed with mutexDestroy()
+ *    - Must be destroyed with mutexDestroy().
  ****************************************************************************/
 Mutex* mutexCreate(const char* name);
 #endif
@@ -729,41 +730,40 @@ Mutex* mutexCreate(const char* name);
 #ifdef kfree
 /****************************************************************************
  * Function: mutexDestroy
- *    - destroy/free a previously allocated mutex
+ *    - Destroys/frees a previously dynamically allocated mutex.
  * Arguments:
- *    mutex - semaphore previously allocated with mutexCreate()
+ *    mutex - mutex previously allocated with mutexCreate()
  * Notes:
- *    - cannot be called on an active mutex
+ *    - Must not be called on an active mutex.
  ****************************************************************************/
 void mutexDestroy(Mutex* mutex);
 #endif
 
 /****************************************************************************
  * Function: mutexLock
- *    - lock a mutex
+ *    - Locks a mutex.
  * Arguments:
  *    mutex - mutex to use
  *    ticks - number of ticks to wait until mutex becomes available
- *            (-1 = wait forever)
+ *            (-1 == wait forever)
  * Returns:
  *    - true if successful / false otherwise
  * Notes:
- *    - may yield current task
- *    - NOT interrupt context safe
- *    - will increase priority of task holding the mutex if higher priority
- *      attempts to take lock
+ *    - Will increase priority of task holding the mutex if higher priority
+ *      attempts to take lock.
+ *    - NOT interrupt context safe / May yield current task.
  ****************************************************************************/
 bool mutexLock(Mutex* mutex, unsigned long ticks);
 
 /****************************************************************************
  * Function: mutexUnlock
- *    - unlock a mutex
+ *    - Unlocks a mutex.
  * Arguments:
  *    mutex - mutex to use
  * Notes:
- *    - may yield current task
- *    - NOT interrupt context safe
+ *    - NOT interrupt context safe / May yield current task.
  ****************************************************************************/
 void mutexUnlock(Mutex* mutex);
 #endif
+
 #endif
