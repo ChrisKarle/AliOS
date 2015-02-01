@@ -51,9 +51,9 @@
 /****************************************************************************
  *
  ****************************************************************************/
-static void tx(UART* uart, int c)
+static bool tx(CharDev* dev, int c)
 {
-   PL011* pl011 = (PL011*) uart;
+   PL011* pl011 = (PL011*) dev;
 
    if (pl011->queue.tx != NULL)
    {
@@ -62,9 +62,13 @@ static void tx(UART* uart, int c)
       if (interruptsEnabled())
       {
          c8 = (unsigned char) c;
-         queuePush(pl011->queue.tx, true, &c8, -1);
+
+         if (!queuePush(pl011->queue.tx, true, &c8, pl011->dev.timeout.tx))
+            return false;
+
          UARTIMSC(pl011) |= 0x0020;
-         return;
+
+         return true;
       }
       else
       {
@@ -79,14 +83,16 @@ static void tx(UART* uart, int c)
 
    UART0DR(pl011) = (unsigned char) c;
    while (UARTFR(pl011) & 0x0008);
+
+   return true;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static int rx(UART* uart, bool blocking)
+static int rx(CharDev* dev, bool blocking)
 {
-   PL011* pl011 = (PL011*) uart;
+   PL011* pl011 = (PL011*) dev;
    int c = EOF;
 
    if (pl011->queue.rx != NULL)
@@ -95,7 +101,7 @@ static int rx(UART* uart, bool blocking)
 
       if (interruptsEnabled())
       {
-         unsigned long timeout = blocking ? pl011->uart.timeout : 0;
+         unsigned long timeout = blocking ? pl011->dev.timeout.rx : 0;
 
          if (queuePop(pl011->queue.rx, true, false, &c8, timeout))
             c = c8;
@@ -151,9 +157,10 @@ void pl011IRQ(unsigned int n, void* _pl011)
  ****************************************************************************/
 void pl011Init(PL011* pl011, unsigned long clk, unsigned long baud, int dps)
 {
-   pl011->uart.tx = tx;
-   pl011->uart.rx = rx;
-   pl011->uart.timeout = -1;
+   pl011->dev.tx = tx;
+   pl011->dev.rx = rx;
+   pl011->dev.timeout.tx = -1;
+   pl011->dev.timeout.rx = -1;
 
    UARTIBRD(pl011) = clk / (16 * baud);
    UARTFBRD(pl011) = (clk / (float) (16 * baud) - (clk / (16 * baud))) * 64 +

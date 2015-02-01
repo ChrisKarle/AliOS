@@ -35,7 +35,8 @@ PROJECT = AliOS
 #
 ##############################################################################
 QEMU_ARGS = -M versatilepb -m 128M -nographic -kernel $(BIN_FILE)
-#            -net user -net nic,model=smc91c111 -net dump
+#            -net user,hostfwd=tcp::5555-:80 -net nic,model=smc91c111 \
+#            -net dump
 
 ##############################################################################
 #
@@ -92,6 +93,7 @@ C_FILES += kernel.c shell.c
 ##############################################################################
 #
 ##############################################################################
+INCLUDES += -I../../drivers
 VPATH += ../../drivers/uart
 VPATH += ../../drivers/timer
 VPATH += ../../drivers/net

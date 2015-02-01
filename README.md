@@ -19,7 +19,6 @@ Ports for the following are available.
 
 Current work...
 
-   - clean up drivers / driver framework
    - improve lwIP port (example applications)
 
 Future work...

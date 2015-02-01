@@ -143,9 +143,9 @@ int main(void* stack, unsigned long size)
    sicInit(&sic);
    vic.ctrl.addHandler(&vic.ctrl, 31, sicIRQ, &sic, false, 1);
 
-   pl011Init(&pl011, 4000000, 115200, UART_DPS_8N1);
+   pl011Init(&pl011, 4000000, 115200, PL011_DPS_8N1);
    vic.ctrl.addHandler(&vic.ctrl, 12, pl011IRQ, &pl011, false, 1);
-   libcInit(&pl011.uart);
+   libcInit(&pl011.dev);
 
    sp804Init(&sp804, 1000000);
    vic.ctrl.addHandler(&vic.ctrl, 4, sp804IRQ, &sp804, false, 1);
@@ -159,6 +159,14 @@ int main(void* stack, unsigned long size)
 
    puts("AliOS on ARM");
    enableInterrupts();
+
+#if 0
+   struct netconn* conn = netconn_new(NETCONN_TCP);
+   netconn_bind(conn, NULL, 80);
+   netconn_listen(conn);
+   struct netconn* newconn;
+   netconn_accept(conn, &newconn);
+#endif
 
    shellRun(SHELL_CMDS);
 

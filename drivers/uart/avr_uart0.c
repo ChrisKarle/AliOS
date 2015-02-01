@@ -39,7 +39,7 @@
 #endif
 
 #ifndef UART0_DPS
-#define UART0_DPS UART_DPS_8N1
+#define UART0_DPS UART0_DPS_8N1
 #endif
 
 /****************************************************************************
@@ -107,7 +107,7 @@ ISR(USART0_RX_vect)
 /****************************************************************************
  *
  ****************************************************************************/
-static void tx(UART* uart, int c)
+static bool tx(CharDev* dev, int c)
 {
 #if UART0_TX_BUFFER_SIZE > 0
    uint8_t c8;
@@ -115,7 +115,10 @@ static void tx(UART* uart, int c)
    if (SREG & 0x80)
    {
       c8 = (uint8_t) c;
-      queuePush(&txQueue, true, &c8, -1);
+
+      if (!queuePush(&txQueue, true, &c8, dev->timeout.tx))
+         return false;
+
       UCSR0B |= 0x20;
    }
    else
@@ -134,12 +137,14 @@ static void tx(UART* uart, int c)
       UDR0 = (uint8_t) c;
       while ((UCSR0A & 0x40) == 0);
    }
+
+   return true;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static int rx(UART* uart, bool blocking)
+static int rx(CharDev* dev, bool blocking)
 {
    int c = EOF;
 #if UART0_RX_BUFFER_SIZE > 0
@@ -147,7 +152,8 @@ static int rx(UART* uart, bool blocking)
 
    if (SREG & 0x80)
    {
-      if (queuePop(&rxQueue, true, false, &c8, blocking ? uart->timeout : 0))
+      unsigned long timeout = blocking ? dev->timeout.rx : 0;
+      if (queuePop(&rxQueue, true, false, &c8, timeout))
          c = c8;
    }
    else
@@ -175,22 +181,16 @@ static int rx(UART* uart, bool blocking)
 /****************************************************************************
  *
  ****************************************************************************/
-void uart0Init(UART* uart)
+void uart0Init(CharDev* dev)
 {
-   uart->tx = tx;
-   uart->rx = rx;
-   uart->timeout = -1;
+   dev->tx = tx;
+   dev->rx = rx;
+   dev->timeout.tx = -1;
+   dev->timeout.rx = -1;
 
    UBRR0H = UBRRH_VALUE;
    UBRR0L = UBRRL_VALUE;
-
-   switch (UART0_DPS)
-   {
-      case UART_DPS_8N1:
-         UCSR0C = 0x06;
-         break;
-   }
-
+   UCSR0C = UART0_DPS;
 #if USE_2X
    UCSR0A = 0x01;
 #endif

@@ -49,6 +49,7 @@
    0,                                                \
    {},                                               \
    {stackSize, (unsigned char[stackSize]) {}, NULL}, \
+   {},                                               \
    NULL                                              \
 }
 
@@ -82,6 +83,13 @@
 /****************************************************************************
  *
  ****************************************************************************/
+#ifndef TASK_USER_DATA
+#define TASK_USER_DATA
+#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 typedef struct _Task
 {
    const char* name;
@@ -106,6 +114,12 @@ typedef struct _Task
 
    } stack;
 
+   struct
+   {
+	  TASK_USER_DATA;
+
+   } user;
+
    struct _Task* next;
 
 } Task;
@@ -123,6 +137,17 @@ typedef struct _Task
  ****************************************************************************/
 Task* taskCreate(const char* name, unsigned long stackSize, bool freeOnExit);
 #endif
+
+/****************************************************************************
+ * Function: taskCurrent
+ *    - Gets a pointer to the current task.
+ * Returns:
+ *    - pointer to current task
+ * Notes:
+ *    - Other than retrieving user data, there is really no need to access
+ *      or modify any state information within the Task structure.
+ ****************************************************************************/
+Task* taskCurrent();
 
 /****************************************************************************
  * Function: _taskStart

@@ -475,18 +475,13 @@ Task* taskCreate(const char* name, unsigned long stackSize, bool freeOnExit)
 {
    Task* task = kmalloc(sizeof(Task));
 
+   memset(task, 0, sizeof(Task));
+
    task->name = name;
    task->state = TASK_STATE_END;
-   task->priority = 0;
    task->flags = TASK_FLAG_ALLOC;
-   task->wait.type = NULL;
-   task->wait.timeout = 0;
-   task->wait.ptr = NULL;
-   task->wait.next = NULL;
    task->stack.size = stackSize;
    task->stack.base = kmalloc(stackSize);
-   task->stack.ptr = NULL;
-   task->next = NULL;
 
    if (freeOnExit)
       task->flags |= TASK_FLAG_FREE_ON_EXIT;
@@ -494,6 +489,14 @@ Task* taskCreate(const char* name, unsigned long stackSize, bool freeOnExit)
    return task;
 }
 #endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+Task* taskCurrent()
+{
+   return current;
+}
 
 /****************************************************************************
  *
@@ -1042,15 +1045,10 @@ Timer* timerCreate(const char* name, unsigned char flags)
 {
    Timer* timer = kmalloc(sizeof(Timer));
 
+   memset(timer, 0, sizeof(Timer));
+
    timer->name = name;
-   timer->task = NULL;
-   timer->fx = NULL;
-   timer->ptr = NULL;
-   timer->ticks[0] = 0;
-   timer->ticks[1] = 0;
-   timer->priority = 0;
    timer->flags = flags;
-   timer->next = NULL;
 
    return timer;
 }
@@ -1190,13 +1188,12 @@ Queue* queueCreate(const char* name, unsigned int elementSize,
 {
    Queue* queue = kmalloc(sizeof(Queue));
 
+   memset(queue, 0, sizeof(Queue));
+
    queue->name = name;
    queue->size = elementSize;
    queue->max = maxElements;
-   queue->count = 0;
-   queue->index = 0;
    queue->buffer = kmalloc(elementSize * maxElements);
-   queue->task = NULL;
 
    return queue;
 }

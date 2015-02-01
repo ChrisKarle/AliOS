@@ -71,7 +71,7 @@ static const ShellCmd SHELL_CMDS[] =
  ****************************************************************************/
 extern uint8_t __stack[];
 static Task task;
-static UART uart;
+static CharDev uart0;
 
 /****************************************************************************
  *
@@ -172,8 +172,8 @@ int main()
    void* stackBase = __stack - TASK0_STACK_SIZE + 1;
 
    taskInit(&task, "main", TASK_LOW_PRIORITY, stackBase, TASK0_STACK_SIZE);
-   uart0Init(&uart);
-   libcInit(&uart);
+   uart0Init(&uart0);
+   libcInit(&uart0);
 
    /* timer2 default tick (1ms) */
    OCR2A = F_CPU / 1000 / 64;

@@ -31,8 +31,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "kernel.h"
+#include "libc_glue.h"
 #include "platform.h"
-#include "uart.h"
 
 /****************************************************************************
  *
@@ -45,7 +45,7 @@ extern uint8_t __bss_end__[];
  ****************************************************************************/
 static Mutex mutex = MUTEX_CREATE("malloc");
 static uint8_t* heap = __bss_end__;
-static UART* uart = NULL;
+static CharDev* _dev = NULL;
 
 /****************************************************************************
  *
@@ -74,9 +74,15 @@ void WEAK __malloc_unlock(struct _reent* _r)
  ****************************************************************************/
 ssize_t WEAK _write(int fd, const void* buffer, size_t count)
 {
+   CharDev* dev = _dev;
    size_t i;
 
-   if ((fd != 1) && (fd != 2))
+#ifdef TASK_CONSOLE
+   if (taskCurrent()->user.TASK_CONSOLE != NULL)
+      dev = taskCurrent()->user.TASK_CONSOLE;
+#endif
+
+   if (((fd != 1) && (fd != 2)) || (dev == NULL))
    {
       errno = EBADF;
       return -1;
@@ -87,9 +93,9 @@ ssize_t WEAK _write(int fd, const void* buffer, size_t count)
       int c = ((const uint8_t*) buffer)[i];
 
       if (c == '\n')
-         uart->tx(uart, '\r');
+         dev->tx(dev, '\r');
 
-      uart->tx(uart, c);
+      dev->tx(dev, c);
    }
 
    return (ssize_t) count;
@@ -100,9 +106,15 @@ ssize_t WEAK _write(int fd, const void* buffer, size_t count)
  ****************************************************************************/
 ssize_t WEAK _read(int fd, void* buffer, size_t count)
 {
+   CharDev* dev = _dev;
    size_t i;
 
-   if (fd != 0)
+#ifdef TASK_CONSOLE
+   if (taskCurrent()->user.TASK_CONSOLE != NULL)
+      dev = taskCurrent()->user.TASK_CONSOLE;
+#endif
+
+   if ((fd != 0) || (dev == NULL))
    {
       errno = EBADF;
       return -1;
@@ -110,7 +122,7 @@ ssize_t WEAK _read(int fd, void* buffer, size_t count)
 
    for (i = 0; i < count; i++)
    {
-      int c = uart->rx(uart, i ? false : true);
+      int c = dev->rx(dev, i ? false : true);
 
       if (c == EOF)
          break;
@@ -217,7 +229,7 @@ int WEAK _isatty(int fd)
 /****************************************************************************
  *
  ****************************************************************************/
-void WEAK libcInit(UART* _uart)
+void WEAK libcInit(CharDev* __dev)
 {
-   uart = _uart;
+   _dev = __dev;
 }

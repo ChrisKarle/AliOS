@@ -162,9 +162,9 @@ int main(void* stack, unsigned long size)
 
    gicInit(&gic);
 
-   pl011Init(&pl011, 4000000, 115200, UART_DPS_8N1);
+   pl011Init(&pl011, 4000000, 115200, PL011_DPS_8N1);
    gic.ctrl.addHandler(&gic.ctrl, 37, pl011IRQ, &pl011, false, 1 << cpuID());
-   libcInit(&pl011.uart);
+   libcInit(&pl011.dev);
 
    sp804Init(&sp804, 1000000);
    gic.ctrl.addHandler(&gic.ctrl, 34, sp804IRQ, &sp804, true, 1 << cpuID());

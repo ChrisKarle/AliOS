@@ -28,11 +28,11 @@
 #ifndef LIBC_GLUE_H
 #define LIBC_GLUE_H
 
-#include "uart.h"
+#include "char_dev.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-void libcInit(UART* uart);
+void libcInit(CharDev* dev);
 
 #endif

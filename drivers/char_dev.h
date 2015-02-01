@@ -25,8 +25,8 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#ifndef UART_H
-#define UART_H
+#ifndef CHAR_DEV_H
+#define CHAR_DEV_H
 
 /****************************************************************************
  *
@@ -36,18 +36,18 @@
 /****************************************************************************
  *
  ****************************************************************************/
-#define UART_DPS_8N1 1
-
-/****************************************************************************
- *
- ****************************************************************************/
-typedef struct _UART
+typedef struct _CharDev
 {
-   void (*tx)(struct _UART*, int);
-   int (*rx)(struct _UART*, bool);
+   bool (*tx)(struct _CharDev*, int);
+   int (*rx)(struct _CharDev*, bool);
 
-   unsigned long timeout;
+   struct
+   {
+      unsigned long tx;
+      unsigned long rx;
 
-} UART;
+   } timeout;
+
+} CharDev;
 
 #endif

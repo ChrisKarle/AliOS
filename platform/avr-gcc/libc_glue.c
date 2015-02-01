@@ -27,22 +27,31 @@
  ****************************************************************************/
 #include <stdio.h>
 #include "libc_glue.h"
-#include "uart.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-static UART* uart = NULL;
+static CharDev* _dev = NULL;
 
 /****************************************************************************
  *
  ****************************************************************************/
 static int _fputc(char c, FILE* stream)
 {
-   if (c == '\n')
-      uart->tx(uart, '\r');
+   CharDev* dev = _dev;
 
-   uart->tx(uart, c);
+#ifdef TASK_CONSOLE
+   if (taskCurrent()->user.TASK_CONSOLE != NULL)
+      dev = taskCurrent()->user.TASK_CONSOLE;
+#endif
+
+   if (dev != NULL)
+   {
+      if (c == '\n')
+         dev->tx(dev, '\r');
+
+      dev->tx(dev, c);
+   }
 
    return 0;
 }
@@ -52,10 +61,21 @@ static int _fputc(char c, FILE* stream)
  ****************************************************************************/
 static int _fgetc(FILE* stream)
 {
-   int c = uart->rx(uart, true);
+   CharDev* dev = _dev;
+   int c = EOF;
 
-   if (c == '\r')
-      c = '\n';
+#ifdef TASK_CONSOLE
+   if (taskCurrent()->user.TASK_CONSOLE != NULL)
+      dev = taskCurrent()->user.TASK_CONSOLE;
+#endif
+
+   if (dev != NULL)
+   {
+      c = dev->rx(dev, true);
+
+      if (c == '\r')
+         c = '\n';
+   }
 
    return c;
 }
@@ -69,9 +89,9 @@ static FILE _stdout = FDEV_SETUP_STREAM(_fputc, NULL, _FDEV_SETUP_WRITE);
 /****************************************************************************
  *
  ****************************************************************************/
-void libcInit(UART* _uart)
+void libcInit(CharDev* __dev)
 {
-   uart = _uart;
+   _dev = __dev;
    stdin = &_stdin;
    stdout = &_stdout;
    stderr = &_stdout;
