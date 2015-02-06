@@ -25,26 +25,24 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#ifndef CHAR_DEV_H
-#define CHAR_DEV_H
+#ifndef MEM_DEV_H
+#define MEM_DEV_H
 
-#include <stdbool.h>
+#include "block_dev.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-typedef struct _CharDev
+typedef struct
 {
-   bool (*tx)(struct _CharDev* dev, int c);
-   int (*rx)(struct _CharDev* dev, bool blocking);
+   BlockDev dev;
+   void* base;
 
-   struct
-   {
-      unsigned long tx;
-      unsigned long rx;
+} MemDev;
 
-   } timeout;
-
-} CharDev;
+/****************************************************************************
+ *
+ ****************************************************************************/
+void memDevInit(MemDev* memDev, void* base, unsigned int size);
 
 #endif

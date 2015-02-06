@@ -25,26 +25,30 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#ifndef CHAR_DEV_H
-#define CHAR_DEV_H
-
-#include <stdbool.h>
+#ifndef BLOCK_DEV_H
+#define BLOCK_DEV_H
 
 /****************************************************************************
  *
  ****************************************************************************/
-typedef struct _CharDev
+typedef struct _BlockDev
 {
-   bool (*tx)(struct _CharDev* dev, int c);
-   int (*rx)(struct _CharDev* dev, bool blocking);
+   unsigned long (*erase)(struct _BlockDev* dev, unsigned long offset,
+                          unsigned long count);
+   unsigned long (*write)(struct _BlockDev* dev, unsigned long offset,
+                          const void* ptr, unsigned long count);
+   unsigned long (*read)(struct _BlockDev* dev, unsigned long offset,
+                         void* ptr, unsigned long count);
 
    struct
    {
-      unsigned long tx;
-      unsigned long rx;
+      unsigned int erase;
+      unsigned int write;
 
-   } timeout;
+   } blockSize;
 
-} CharDev;
+   unsigned long numBlocks;
+
+} BlockDev;
 
 #endif

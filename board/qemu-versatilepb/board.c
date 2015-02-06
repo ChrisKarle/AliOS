@@ -32,7 +32,9 @@
 #include "lan91c.h"
 #include "libc_glue.h"
 #include "lwip/tcpip.h"
+#include "mem_dev.h"
 #include "pl011.h"
+#include "romfs.h"
 #include "shell.h"
 #include "sic.h"
 #include "sp804.h"
@@ -41,19 +43,8 @@
 /****************************************************************************
  *
  ****************************************************************************/
-static void taskListCmd(int argc, char* argv[])
-{
-   taskList();
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-static const ShellCmd SHELL_CMDS[] =
-{
-   {"tl", taskListCmd},
-   {NULL, NULL}
-};
+extern unsigned char _binary_fs_data_bin_start[];
+extern unsigned char _binary_fs_data_bin_end[];
 
 /****************************************************************************
  *
@@ -74,6 +65,63 @@ static LAN91C lan91c = LAN91C_CREATE
 static VIC vic = VIC_CREATE(0x10140000);
 static SIC sic = SIC_CREATE(0x10003000);
 static Task task;
+static MemDev memDev;
+static ROMFS romfs;
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void tlCmd(int argc, char* argv[])
+{
+   taskList();
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void lsCmd(int argc, char* argv[])
+{
+   fsList(&romfs.fs);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void cdCmd(int argc, char* argv[])
+{
+   const char* dir = "/";
+
+   if (argc > 1)
+      dir = argv[1];
+
+   fsOpen(&romfs.fs, dir);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void catCmd(int argc, char* argv[])
+{
+   if (argc != 2)
+   {
+      printf("usage: %s <file>\n", argv[0]);
+      return;
+   }
+
+   fsCat(&romfs.fs, argv[1]);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static const ShellCmd SHELL_CMDS[] =
+{
+   {"tl", tlCmd},
+   {"ls", lsCmd},
+   {"cd", cdCmd},
+   {"cat", catCmd},
+   {NULL, NULL}
+};
 
 /****************************************************************************
  *
@@ -156,6 +204,10 @@ int main(void* stack, unsigned long size)
    sic.ctrl.addHandler(&sic.ctrl, 25, lan91cIRQ, &lan91c, false, 1);
 
    tcpip_init(NULL, NULL);
+
+   memDevInit(&memDev, _binary_fs_data_bin_start,
+              _binary_fs_data_bin_end - _binary_fs_data_bin_start);
+   romfsInit(&romfs, &memDev.dev);
 
    puts("AliOS on ARM");
    enableInterrupts();

@@ -71,9 +71,10 @@ debug: $(BIN_FILE)
 ##############################################################################
 #
 ##############################################################################
-C_FLAGS = -Wall -Wno-main -Wno-address -g -mcpu=arm926ej-s
+C_FLAGS = -Wall -Wno-main -Wno-address -Os -mcpu=arm926ej-s
 LD_FLAGS = -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I.
+BIN_FILES = fs_data.bin
 C_FILES = board.c
 S_FILES =
 
@@ -93,11 +94,13 @@ C_FILES += kernel.c shell.c
 ##############################################################################
 #
 ##############################################################################
-INCLUDES += -I../../drivers
-VPATH += ../../drivers/uart
-VPATH += ../../drivers/timer
+VPATH += ../../drivers
+VPATH += ../../drivers/fs
+VPATH += ../../drivers/misc
 VPATH += ../../drivers/net
-C_FILES += pl011.c sp804.c lan91c.c
+VPATH += ../../drivers/timer
+VPATH += ../../drivers/uart
+C_FILES += fs.c pl011.c sp804.c lan91c.c romfs.c mem_dev.c
 
 ##############################################################################
 #
@@ -109,7 +112,8 @@ include ../../lwip/Makefile.inc
 ##############################################################################
 INCLUDES += $(addprefix -I,$(VPATH))
 
-OBJ_FILES = $(C_FILES:%.c=%.o)
+OBJ_FILES += $(BIN_FILES:%.bin=%.o)
+OBJ_FILES += $(C_FILES:%.c=%.o)
 OBJ_FILES += $(S_FILES:%.S=%.o)
 DEP_FILES = $(C_FILES:%.c=%.d)
 DEP_FILES += $(S_FILES:%.S=%.d)
@@ -127,6 +131,9 @@ $(ELF_FILE): $(OBJ_FILES)
 %.o: %.S
 	$(CROSS_COMPILE)gcc -D__ASM__ $(C_FLAGS) $(INCLUDES) -M -o $*.d $<
 	$(CROSS_COMPILE)gcc -D__ASM__ $(C_FLAGS) $(INCLUDES) -c -o $@ $<
+
+%.o: %.bin
+	$(CROSS_COMPILE)objcopy -B arm -I binary -O elf32-littlearm $< $@
 
 .PHONY: clean obj_clean dep_clean
 clean: obj_clean dep_clean

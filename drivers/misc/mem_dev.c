@@ -25,26 +25,60 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#ifndef CHAR_DEV_H
-#define CHAR_DEV_H
-
-#include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
+#include "mem_dev.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-typedef struct _CharDev
+static unsigned long write(BlockDev* dev, unsigned long offset,
+                           const void* ptr, unsigned long count)
 {
-   bool (*tx)(struct _CharDev* dev, int c);
-   int (*rx)(struct _CharDev* dev, bool blocking);
+   MemDev* memDev = (MemDev*) dev;
 
-   struct
-   {
-      unsigned long tx;
-      unsigned long rx;
+   if (offset >= memDev->dev.numBlocks)
+      return 0;
 
-   } timeout;
+   if ((offset + count) > memDev->dev.numBlocks)
+      count = memDev->dev.numBlocks - offset;
 
-} CharDev;
+   memcpy(&((uint8_t*) memDev->base)[offset], ptr, count);
 
-#endif
+   return count;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static unsigned long read(BlockDev* dev, unsigned long offset, void* ptr,
+                          unsigned long count)
+{
+   MemDev* memDev = (MemDev*) dev;
+
+   if (offset >= memDev->dev.numBlocks)
+      return 0;
+
+   if ((offset + count) > memDev->dev.numBlocks)
+      count = memDev->dev.numBlocks - offset;
+
+   memcpy(ptr, &((uint8_t*) memDev->base)[offset], count);
+
+   return count;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void memDevInit(MemDev* memDev, void* base, unsigned int size)
+{
+   memDev->dev.erase = NULL;
+   memDev->dev.write = write;
+   memDev->dev.read = read;
+
+   memDev->dev.blockSize.erase = 0;
+   memDev->dev.blockSize.write = 1;
+
+   memDev->dev.numBlocks = size;
+   memDev->base = base;
+}

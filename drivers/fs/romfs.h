@@ -25,26 +25,32 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#ifndef CHAR_DEV_H
-#define CHAR_DEV_H
+#ifndef ROMFS_H
+#define ROMFS_H
 
-#include <stdbool.h>
+#include <stdint.h>
+#include "block_dev.h"
+#include "fs.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-typedef struct _CharDev
+typedef struct
 {
-   bool (*tx)(struct _CharDev* dev, int c);
-   int (*rx)(struct _CharDev* dev, bool blocking);
+   FS fs;
+   BlockDev* dev;
+   uint32_t root;
+   uint32_t pushd;
+   uint32_t cwd;
+   uint32_t ptr;
+   uint32_t open;
+   unsigned long offset;
 
-   struct
-   {
-      unsigned long tx;
-      unsigned long rx;
+} ROMFS;
 
-   } timeout;
-
-} CharDev;
+/****************************************************************************
+ *
+ ****************************************************************************/
+bool romfsInit(ROMFS* romfs, BlockDev* dev);
 
 #endif
