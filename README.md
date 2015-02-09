@@ -19,7 +19,7 @@ Ports for the following are available.
 
 Current work...
 
-   - improve lwIP port (example applications)
+   - improve HTTP server (allow for simple dynamic pages)
 
 Future work...
 
