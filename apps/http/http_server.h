@@ -25,72 +25,73 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#ifndef LWIPOPTS_H
-#define LWIPOPTS_H
+#ifndef HTTP_SERVER_H
+#define HTTP_SERVER_H
+
+#include "fs.h"
+#include "lwip/tcpip.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define LWIP_DHCP      1
-#define LWIP_DNS       1
-#define LWIP_TCP       1
-#define LWIP_NETIF_API 1
+#define HTTP_REQUEST_NONE 0
+#define HTTP_REQUEST_GET  1
+#define HTTP_REQUEST_HEAD 2
+#define HTTP_REQUEST_PUT  3
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define TCPIP_THREAD_NAME      "tcp/ip"
-#define TCPIP_THREAD_STACKSIZE 2048
-#define TCPIP_THREAD_PRIO      0
-#define TCPIP_MBOX_SIZE        8
-#define TCP_MSS                (1500 - 40)
+#define HTTP_RESPONSE_200 "HTTP/1.1 200 OK\r\n"
+#define HTTP_RESPONSE_404 "HTTP/1.1 404 Not Found\r\n"
+#define HTTP_RESPONSE_500 "HTTP/1.1 500 Internal Server Error\r\n"
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define DEFAULT_RAW_RECVMBOX_SIZE 8
-#define DEFAULT_UDP_RECVMBOX_SIZE 8
-#define DEFAULT_TCP_RECVMBOX_SIZE 8
-#define DEFAULT_ACCEPTMBOX_SIZE   8
+typedef struct
+{
+   const char* path;
+   void (*fx)(struct netconn* client, struct netbuf* netbuf, void* server);
+
+} HTTPCallback;
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define SYS_LIGHTWEIGHT_PROT 1
-#define MEM_ALIGNMENT        4
-#define MEM_LIBC_MALLOC      1
-#define MEMP_MEM_MALLOC      1
+typedef struct
+{
+   const char* ext;
+   const char* str;
+
+} HTTPContentType;
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define LWIP_PLATFORM_BYTESWAP 1
-#define LWIP_PLATFORM_HTONS(x) htobe16(x)
-#define LWIP_PLATFORM_HTONL(x) htobe32(x)
+typedef struct
+{
+   FS* fs;
+   HTTPCallback* callbacks;
+   HTTPContentType* types;
+   const char* index;
+
+} HTTPServer;
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define LWIP_PLATFORM_DIAG(x) do { printf x; } while (0)
-#define LWIP_PLATFORM_ASSERT(x)
+int httpReqAction(struct netbuf* netbuf);
 
 /****************************************************************************
  *
  ****************************************************************************/
-//#define LWIP_DEBUG       1
-//#define IP_DEBUG         LWIP_DBG_ON
-//#define ETHARP_DEBUG     LWIP_DBG_ON
-//#define ICMP_DEBUG       LWIP_DBG_ON
-//#define UDP_DEBUG        LWIP_DBG_ON
-//#define DHCP_DEBUG       LWIP_DBG_ON
-//#define TCP_INPUT_DEBUG  LWIP_DBG_ON
-//#define TCP_OUTPUT_DEBUG LWIP_DBG_ON
-//#define TCP_DEBUG        LWIP_DBG_ON
-//#define TCPIP_DEBUG      LWIP_DBG_ON
-//#define PBUF_DEBUG       LWIP_DBG_ON
+unsigned int httpReqPath(struct netbuf* netbuf, char* path,
+                         unsigned int length);
 
-#ifdef LWIP_DEBUG
-#include <stdio.h>
-#endif
+/****************************************************************************
+ *
+ ****************************************************************************/
+void httpServerFx(void* server);
 
 #endif

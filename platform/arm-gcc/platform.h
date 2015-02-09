@@ -76,12 +76,34 @@
 #define PACK_STRUCT_BEGIN
 #define PACK_STRUCT_END
 
+/****************************************************************************
+ *
+ ****************************************************************************/
+#define U8_F  "c"
+#define S8_F  "c"
+#define X8_F  "x"
+#define U16_F "u"
+#define S16_F "d"
+#define X16_F "x"
+#define U32_F "lu"
+#define S32_F "ld"
+#define X32_F "lx"
+#define SZT_F "z"
+
 #ifndef __ASM__
 /****************************************************************************
  *
  ****************************************************************************/
 #include <stdbool.h>
 #include "kernel.h"
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+#define be16toh bSwap16
+#define be32toh bSwap32
+#define htobe16 bSwap16
+#define htobe32 bSwap32
 
 /****************************************************************************
  *
@@ -149,7 +171,7 @@ void testAndSet(unsigned int* ptr, unsigned int a, unsigned int b);
 /****************************************************************************
  *
  ****************************************************************************/
-static inline unsigned short be16toh(unsigned short value)
+static inline unsigned short bSwap16(unsigned short value)
 {
    value = (value >> 8) | (value << 8);
    return value;
@@ -158,7 +180,7 @@ static inline unsigned short be16toh(unsigned short value)
 /****************************************************************************
  *
  ****************************************************************************/
-static inline unsigned long be32toh(unsigned long value)
+static inline unsigned long bSwap32(unsigned long value)
 {
    unsigned long tmp = 0;
 

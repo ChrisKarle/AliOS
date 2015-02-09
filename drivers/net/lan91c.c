@@ -144,7 +144,6 @@ static err_t lan91cTx(struct netif* netif, struct pbuf* pbuf)
 {
    LAN91C* lan91c = netif->state;
    struct pbuf* q = NULL;
-   uint8_t odd = 0;
 
    mutexLock(lan91c->lock, -1);
 
@@ -178,16 +177,20 @@ static err_t lan91cTx(struct netif* netif, struct pbuf* pbuf)
 
       if (q->len & 1)
       {
-         odd = *(uint8_t*) payload;
-         B2_DATA8n(lan91c)[0] = odd;
+         B2_DATA8n(lan91c)[0] = *(uint8_t*) payload;
          payload++;
       }
    }
 
-   if (pbuf->tot_len & 1)
-      B2_DATA16n(lan91c)[0] = 0x2000 | odd;
+   if (B2_PTR(lan91c) & 1)
+   {
+      B2_PTR(lan91c) &= ~0x4001;
+      B2_DATA16n(lan91c)[0] = 0x2000 | B2_DATA8n(lan91c)[0];
+   }
    else
+   {
       B2_DATA16n(lan91c)[0] = 0;
+   }
 
    B2_MSK(lan91c) &= ~0x01;
    B2_MMUCR(lan91c) = 6 << 5;

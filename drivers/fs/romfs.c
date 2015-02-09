@@ -147,15 +147,11 @@ static unsigned long romfsRead(FS* fs, void* buffer, unsigned long count)
       romfs->dev->read(romfs->dev, romfs->ptr + 8, &size, 4);
       size = be32toh(size);
 
-      if (romfs->offset < size)
-      {
-         count = romfs->dev->read(romfs->dev, romfs->open + romfs->offset,
-                                  buffer, count);
-      }
-      else
-      {
-         count = 0;
-      }
+      if ((size - romfs->offset) < count)
+         count = size - romfs->offset;
+
+      count = romfs->dev->read(romfs->dev, romfs->open + romfs->offset,
+                               buffer, count);
 
       romfs->offset += count;
    }

@@ -27,7 +27,9 @@
  ****************************************************************************/
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "board.h"
+#include "http_server.h"
 #include "kernel.h"
 #include "lan91c.h"
 #include "libc_glue.h"
@@ -64,9 +66,11 @@ static LAN91C lan91c = LAN91C_CREATE
 );
 static VIC vic = VIC_CREATE(0x10140000);
 static SIC sic = SIC_CREATE(0x10003000);
-static Task task;
+static Task httpTask = TASK_CREATE("httpd", 2048);
+static Task mainTask;
 static MemDev memDev;
 static ROMFS romfs;
+static HTTPServer httpServer;
 
 /****************************************************************************
  *
@@ -185,7 +189,7 @@ int main(void* stack, unsigned long size)
    IP4_ADDR(&netmask, 255, 255, 255, 0);
    IP4_ADDR(&ip, 10, 0, 2, 15);
 
-   taskInit(&task, "main", TASK_HIGH_PRIORITY, stack, size);
+   taskInit(&mainTask, "main", TASK_HIGH_PRIORITY, stack, size);
 
    vicInit(&vic);
    sicInit(&sic);
@@ -209,16 +213,12 @@ int main(void* stack, unsigned long size)
               _binary_fs_data_bin_end - _binary_fs_data_bin_start);
    romfsInit(&romfs, &memDev.dev);
 
+   memset(&httpServer, 0, sizeof(HTTPServer));
+   httpServer.fs = &romfs.fs;
+   taskStart(&httpTask, httpServerFx, &httpServer, TASK_LOW_PRIORITY);
+
    puts("AliOS on ARM");
    enableInterrupts();
-
-#if 0
-   struct netconn* conn = netconn_new(NETCONN_TCP);
-   netconn_bind(conn, NULL, 80);
-   netconn_listen(conn);
-   struct netconn* newconn;
-   netconn_accept(conn, &newconn);
-#endif
 
    shellRun(SHELL_CMDS);
 
