@@ -6,9 +6,11 @@ embedded devices.
    - BSD license (your changes are yours)
    - supports dynamic ticks for low power applications
    - SMP (multicore) support
-   - very minimal ROM and RAM requirements
    - lwIP support
+   - ROMFS support
+   - Simple web server supporting dynamic pages
    - simple/clean/documented API
+   - very minimal ROM and RAM requirements
    - does not need dynamic memory
    - easy to port
 
@@ -19,8 +21,10 @@ Ports for the following are available.
 
 Current work...
 
-   - improve HTTP server (allow for simple dynamic pages)
+   - Renesas RX port (eval board)
 
 Future work...
 
-   - more ports (Renesas RL & RX)
+   - embedded Python (yes, for real)
+   - port dropbear (SSH)
+   - more ports (Renesas RL)
