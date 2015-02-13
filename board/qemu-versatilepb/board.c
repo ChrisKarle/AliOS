@@ -238,6 +238,7 @@ int main(void* stack, unsigned long size)
    memset(&httpServer, 0, sizeof(HTTPServer));
    httpServer.fs = &romfs.fs;
    httpServer.callbacks = HTTP_CALLBACKS;
+   httpServer.index = "index.xhtml";
    taskStart(&httpTask, httpServerFx, &httpServer, TASK_LOW_PRIORITY);
 
    puts("AliOS on ARM");
