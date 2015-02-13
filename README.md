@@ -8,7 +8,7 @@ embedded devices.
    - SMP (multicore) support
    - lwIP support
    - ROMFS support
-   - Simple web server supporting dynamic pages
+   - simple web server supporting dynamic pages
    - simple/clean/documented API
    - very minimal ROM and RAM requirements
    - does not need dynamic memory
