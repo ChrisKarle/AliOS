@@ -130,6 +130,28 @@ static const ShellCmd SHELL_CMDS[] =
 /****************************************************************************
  *
  ****************************************************************************/
+static void httpCounter(struct netconn* client, struct netbuf* netbuf,
+                        void* server)
+{
+   static unsigned int i = 0;
+   char str[16];
+
+   sprintf(str, "%u", i++);
+   netconn_write(client, str, strlen(str), NETCONN_COPY);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static const HTTPCallback HTTP_CALLBACKS[] =
+{
+   {"counter", httpCounter},
+   {NULL, NULL}
+};
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 static void taskTick(HWTimer* timer)
 {
    unsigned long tickClks = sp804.timer.clk / TASK_TICK_HZ;
@@ -215,6 +237,7 @@ int main(void* stack, unsigned long size)
 
    memset(&httpServer, 0, sizeof(HTTPServer));
    httpServer.fs = &romfs.fs;
+   httpServer.callbacks = HTTP_CALLBACKS;
    taskStart(&httpTask, httpServerFx, &httpServer, TASK_LOW_PRIORITY);
 
    puts("AliOS on ARM");

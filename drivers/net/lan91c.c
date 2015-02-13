@@ -149,7 +149,18 @@ static err_t lan91cTx(struct netif* netif, struct pbuf* pbuf)
 
    B2_MSK(lan91c) &= ~0x01;
    B2_MMUCR(lan91c) = 1 << 5; /* allocate TX buffer */
-   while ((B2_IST(lan91c) & 0x08) == 0);
+   while ((B2_IST(lan91c) & 0x08) == 0)
+   {
+      if (B2_ARR(lan91c) & 0x80)
+      {
+         B2_MSK(lan91c) |= 0x01;
+         mutexUnlock(lan91c->lock);
+         taskSleep(1);
+         mutexLock(lan91c->lock, -1);
+         B2_MSK(lan91c) &= ~0x01;
+         B2_MMUCR(lan91c) = 1 << 5;
+      }
+   }
    B2_MSK(lan91c) |= 0x01;
 
    B2_PNR(lan91c) = B2_ARR(lan91c);
@@ -303,7 +314,7 @@ void lan91cIRQ(unsigned int n, void* _lan91c)
 
    if (B2_IST(lan91c) & 0x01)
    {
-      uint8_t pkt = B2_FIFO(lan91c) & ~0x80;
+      uint8_t pkt = B2_RXFIFO(lan91c) & ~0x80;
       _queuePush(lan91c->rxQueue, true, &pkt);
       B2_MMUCR(lan91c) = 3 << 5;
       taskPreempt(false);

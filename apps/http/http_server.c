@@ -33,13 +33,6 @@
 /****************************************************************************
  *
  ****************************************************************************/
-#ifndef HTTP_BUFFER_SIZE
-#define HTTP_BUFFER_SIZE 64
-#endif
-
-/****************************************************************************
- *
- ****************************************************************************/
 static const HTTPContentType TYPES[] =
 {
    {"gif", "image/gif"},
@@ -49,6 +42,11 @@ static const HTTPContentType TYPES[] =
    {"txt", "text/plain"},
    {NULL, NULL}
 };
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+struct netconn* socket = NULL;
 
 /****************************************************************************
  *
@@ -67,7 +65,8 @@ static void netWriteStr(struct netconn* client, const char* str)
 static void httpReqProcess(struct netconn* client, struct netbuf* netbuf,
                            HTTPServer* server)
 {
-   char buffer[HTTP_BUFFER_SIZE] = {0};
+   char* buffer = server->buffer;
+   bool dynamic = false;
    char* ext = NULL;
 
    if (server == NULL)
@@ -76,6 +75,7 @@ static void httpReqProcess(struct netconn* client, struct netbuf* netbuf,
       return;
    }
 
+   buffer[HTTP_BUFFER_SIZE - 1] = '\0';
    httpReqPath(netbuf, buffer, HTTP_BUFFER_SIZE - 1);
 
    if (buffer[strlen(buffer) - 1] == '/')
@@ -88,7 +88,7 @@ static void httpReqProcess(struct netconn* client, struct netbuf* netbuf,
 
    if (server->callbacks != NULL)
    {
-      HTTPCallback* callback = server->callbacks;
+      const HTTPCallback* callback = server->callbacks;
 
       while (callback->path != NULL)
       {
@@ -132,21 +132,95 @@ static void httpReqProcess(struct netconn* client, struct netbuf* netbuf,
       netWriteStr(client, "Content-type: ");
       netWriteStr(client, content);
       netWriteStr(client, "\r\n\r\n");
+
+      if (strcmp(ext, "xhtml") == 0)
+         dynamic = true;
    }
 
    switch (httpReqAction(netbuf))
    {
       case HTTP_REQUEST_GET:
-      {
-         unsigned long count;
-
-         do
+         if (dynamic && (server->callbacks != NULL))
          {
-            count = server->fs->read(server->fs, buffer, HTTP_BUFFER_SIZE);
-            netconn_write(client, buffer, count, NETCONN_COPY);
+            bool state = false;
+            int i = 0;
 
-         } while (count > 0);
-      }
+            while (server->fs->read(server->fs, &buffer[i], 1) > 0)
+            {
+               i++;
+
+               if (state)
+               {
+                  if (i == HTTP_BUFFER_SIZE)
+                  {
+                     buffer[i - 2] = buffer[i - 1];
+                     i--;
+                  }
+
+                  if ((i > 1) && (strncmp(&buffer[i - 2], "?>", 2) == 0))
+                  {
+                     const HTTPCallback* callback = server->callbacks;
+                     char* ptr = buffer;
+
+                     while (*ptr == ' ')
+                        ptr++;
+
+                     buffer[--i] = '\0';
+                     buffer[--i] = '\0';
+                     while ((i > 0) && (buffer[i - 1] == ' '))
+                        buffer[i - 1] = '\0';
+
+                     while (callback->path != NULL)
+                     {
+                        if (strcmp(ptr, callback->path) == 0)
+                        {
+                           callback->fx(client, netbuf, server);
+                           break;
+                        }
+
+                        callback++;
+                     }
+
+                     state = false;
+                     i = 0;
+                  }
+               }
+               else
+               {
+                  if ((i > 1) && (strncmp(&buffer[i - 2], "<?", 2) == 0))
+                  {
+                     netconn_write(client, buffer, i - 2, NETCONN_COPY);
+                     state = true;
+                     i = 0;
+                  }
+               }
+
+               if (i == HTTP_BUFFER_SIZE)
+               {
+                  if (buffer[i - 1] == '<')
+                  {
+                     netconn_write(client, buffer, i - 1, NETCONN_COPY);
+                     buffer[0] = '<';
+                     i = 1;
+                  }
+                  else
+                  {
+                     netconn_write(client, buffer, i, NETCONN_COPY);
+                     i = 0;
+                  }
+               }
+            }
+
+            netconn_write(client, buffer, i, NETCONN_COPY);
+         }
+         else
+         {
+            FS* fs = server->fs;
+            unsigned long count;
+
+            while ((count = fs->read(fs, buffer, HTTP_BUFFER_SIZE)) > 0)
+               netconn_write(client, buffer, count, NETCONN_COPY);
+         }
 
       case HTTP_REQUEST_HEAD:
          break;
@@ -244,13 +318,128 @@ unsigned int httpReqPath(struct netbuf* netbuf, char* path,
 /****************************************************************************
  *
  ****************************************************************************/
+unsigned int httpReqParam(struct netbuf* netbuf, const char* param,
+                          char* value, unsigned int length)
+{
+   bool done = false;
+   unsigned int i = 0;
+   unsigned int j = 0;
+   int state = 0;
+
+   netbuf_first(netbuf);
+
+   do
+   {
+      char* data = NULL;
+      u16_t length = 0;
+      u16_t k = 0;
+
+      netbuf_data(netbuf, (void**) &data, &length);
+
+      while (!done && (k < length))
+      {
+         switch (state)
+         {
+            case 0:
+               if (data[k] == ' ')
+                  state++;
+               else
+                  k++;
+               break;
+
+            case 1:
+               if (data[k] != ' ')
+                  state++;
+               else
+                  k++;
+               break;
+
+            case 2:
+               if (data[k] != ' ')
+               {
+                  if (data[k++] == '?')
+                     state++;
+               }
+               else
+               {
+                  done = true;
+               }
+               break;
+
+            case 3:
+               if ((data[k] == '=') && (j > 0))
+               {
+                  k++;
+                  state += 2;
+               }
+               else if (data[k] != param[j])
+               {
+                  state++;
+               }
+               else
+               {
+                  j++;
+                  k++;
+               }
+               break;
+
+            case 4:
+               if (data[k] == ' ')
+               {
+                  done = true;
+               }
+               else
+               {
+                  if (data[k] == '&')
+                  {
+                     state = 3;
+                     j = 0;
+                  }
+
+                  k++;
+               }
+               break;
+
+            case 5:
+               if ((data[k] != ' ') && (data[k] != '&'))
+               {
+                  if (i < length)
+                     value[i] = data[k];
+
+                  i++;
+                  k++;
+               }
+               else
+               {
+                  done = true;
+               }
+               break;
+         }
+      }
+
+   } while (!done && (netbuf_next(netbuf) >= 0));
+
+   if (i < length)
+      value[i] = '\0';
+
+   return i;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 void httpServerFx(void* server)
 {
-   struct netconn* socket = netconn_new(NETCONN_TCP);
    struct netconn* client = NULL;
+   bool flag = false;
 
-   netconn_bind(socket, NULL, 80);
-   netconn_listen(socket);
+   if (socket == NULL)
+   {
+      socket = netconn_new(NETCONN_TCP);
+      netconn_bind(socket, NULL, 80);
+      netconn_listen(socket);
+      flag = true;
+   }
 
    while (netconn_accept(socket, &client) == ERR_OK)
    {
@@ -268,6 +457,9 @@ void httpServerFx(void* server)
 
    puts("http server shutdown");
 
-   netconn_close(socket);
-   netconn_delete(socket);
+   if (flag)
+   {
+      netconn_close(socket);
+      netconn_delete(socket);
+   }
 }

@@ -28,8 +28,18 @@
 #ifndef HTTP_SERVER_H
 #define HTTP_SERVER_H
 
+#include "board.h"
 #include "fs.h"
 #include "lwip/tcpip.h"
+
+/****************************************************************************
+ * The buffer size needs to be large enough to store any requested path and
+ * arguments.
+ *    e.g. /index.html?foo=1
+ ****************************************************************************/
+#ifndef HTTP_BUFFER_SIZE
+#define HTTP_BUFFER_SIZE 256
+#endif
 
 /****************************************************************************
  *
@@ -45,6 +55,13 @@
 #define HTTP_RESPONSE_200 "HTTP/1.1 200 OK\r\n"
 #define HTTP_RESPONSE_404 "HTTP/1.1 404 Not Found\r\n"
 #define HTTP_RESPONSE_500 "HTTP/1.1 500 Internal Server Error\r\n"
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+#if HTTP_BUFFER_SIZE < 32
+#error HTTP_BUFFER_SIZE < 32
+#endif
 
 /****************************************************************************
  *
@@ -72,9 +89,10 @@ typedef struct
 typedef struct
 {
    FS* fs;
-   HTTPCallback* callbacks;
-   HTTPContentType* types;
+   const HTTPCallback* callbacks;
+   const HTTPContentType* types;
    const char* index;
+   char buffer[HTTP_BUFFER_SIZE];
 
 } HTTPServer;
 
@@ -88,6 +106,12 @@ int httpReqAction(struct netbuf* netbuf);
  ****************************************************************************/
 unsigned int httpReqPath(struct netbuf* netbuf, char* path,
                          unsigned int length);
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+unsigned int httpReqParam(struct netbuf* netbuf, const char* param,
+                          char* value, unsigned int length);
 
 /****************************************************************************
  *
