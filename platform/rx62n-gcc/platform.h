@@ -1,5 +1,5 @@
 /****************************************************************************
- * Copyright (c) 2014, Christopher Karle
+ * Copyright (c) 2015, Christopher Karle
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,36 +31,56 @@
 /****************************************************************************
  *
  ****************************************************************************/
-#include "board.h"
+#define MSTPCRA    (*(volatile unsigned long*) 0x00080010)
+#define MSTPCRB    (*(volatile unsigned long*) 0x00080014)
+#define MSTPCRC    (*(volatile unsigned long*) 0x00080018)
+#define SCKCR      (*(volatile unsigned long*) 0x00080020)
+#define BCKCR      (*(volatile unsigned char*) 0x00080030)
+#define OSTDCR     (*(volatile unsigned short*) 0x00080040)
+#define IR         ((volatile unsigned char*) 0x00087000)
+#define IER        ((volatile unsigned char*) 0x00087200)
+#define IPR        ((volatile unsigned char*) 0x00087300)
+#define CMSTR0     (*(volatile unsigned short*) 0x00088000)
+#define CMT0_CMCR  (*(volatile unsigned short*) 0x00088002)
+#define CMT0_CMCNT (*(volatile unsigned short*) 0x00088004)
+#define CMT0_CMCOR (*(volatile unsigned short*) 0x00088006)
+#define CMT1_CMCR  (*(volatile unsigned short*) 0x00088008)
+#define CMT1_CMCNT (*(volatile unsigned short*) 0x0008800A)
+#define CMT1_CMCOR (*(volatile unsigned short*) 0x0008800C)
+#define CMSTR1     (*(volatile unsigned short*) 0x00088010)
+#define CMT2_CMCR  (*(volatile unsigned short*) 0x00088012)
+#define CMT2_CMCNT (*(volatile unsigned short*) 0x00088014)
+#define CMT2_CMCOR (*(volatile unsigned short*) 0x00088016)
+#define CMT3_CMCR  (*(volatile unsigned short*) 0x00088018)
+#define CMT3_CMCNT (*(volatile unsigned short*) 0x0008801A)
+#define CMT3_CMCOR (*(volatile unsigned short*) 0x0008801C)
+#define PORT5DDR   (*(volatile unsigned char*) 0x0008C005)
+#define PORT5DR    (*(volatile unsigned char*) 0x0008C025)
+#define PORT5      (*(volatile unsigned char*) 0x0008C045)
+#define PORT5ICR   (*(volatile unsigned char*) 0x0008C065)
+#define PFFSCI     (*(volatile unsigned char*) 0x0008C10F)
+#define SUBOSCCR   (*(volatile unsigned char*) 0x0008C28A)
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define BYTE_ORDER LITTLE_ENDIAN
-
-/****************************************************************************
- *
- ****************************************************************************/
-#ifndef ABORT_STACK_SIZE
-#define ABORT_STACK_SIZE 1024
+#ifndef TASK0_STACK_SIZE
+#define TASK0_STACK_SIZE 1024
 #endif
 
-#ifndef FIQ_STACK_SIZE
-#define FIQ_STACK_SIZE 1024
+/****************************************************************************
+ *
+ ****************************************************************************/
+#ifndef INTERRUPT_STACK_SIZE
+#define INTERRUPT_STACK_SIZE 128
 #endif
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define CPU_MODE_USER       0x10
-#define CPU_MODE_FIQ        0x11
-#define CPU_MODE_IRQ        0x12
-#define CPU_MODE_SUPERVISOR 0x13
-#define CPU_MODE_ABORT      0x17
-#define CPU_MODE_UNDEFINED  0x1B
-#define CPU_MODE_SYSTEM     0x1F
-#define CPU_F_BIT           0x40
-#define CPU_I_BIT           0x80
+#ifndef KERNEL_IPL
+#define KERNEL_IPL 1
+#endif
 
 /****************************************************************************
  *
@@ -76,20 +96,6 @@
 #define PACK_STRUCT_BEGIN
 #define PACK_STRUCT_END
 
-/****************************************************************************
- *
- ****************************************************************************/
-#define U8_F  "c"
-#define S8_F  "c"
-#define X8_F  "x"
-#define U16_F "u"
-#define S16_F "d"
-#define X16_F "x"
-#define U32_F "lu"
-#define S32_F "ld"
-#define X32_F "lx"
-#define SZT_F "z"
-
 #ifndef __ASM__
 /****************************************************************************
  *
@@ -100,30 +106,11 @@
 /****************************************************************************
  *
  ****************************************************************************/
-#define be16toh bSwap16
-#define be32toh bSwap32
-#define htobe16 bSwap16
-#define htobe32 bSwap32
-
-/****************************************************************************
- *
- ****************************************************************************/
-typedef struct _IrqCtrl
-{
-   void (*addHandler)(struct _IrqCtrl* ctrl, unsigned int n,
-                      void (*fx)(unsigned int, void*), void* arg, bool edge,
-                      unsigned int cpuMask);
-
-} IrqCtrl;
-
-/****************************************************************************
- *
- ****************************************************************************/
 static inline bool interruptsEnabled()
 {
-   unsigned long cpsr;
-   __asm__ __volatile__("mrs %0, CPSR" : "=r" (cpsr));
-   return (cpsr & CPU_I_BIT) ? false : true;
+   unsigned long psw;
+   __asm__ __volatile__("mvfc psw, %0" : "=r" (psw));
+   return ((psw >> 24) & 0xF) < KERNEL_IPL;
 }
 
 /****************************************************************************
@@ -131,10 +118,7 @@ static inline bool interruptsEnabled()
  ****************************************************************************/
 static inline void enableInterrupts()
 {
-   unsigned long cpsr;
-   __asm__ __volatile__("mrs %0, CPSR" : "=r" (cpsr));
-   __asm__ __volatile__("msr CPSR, %0" : : "r" (cpsr & ~CPU_I_BIT) :
-                        "memory");
+   __asm__ __volatile__("mvtipl %0" : : "i" (0) : "memory");
 }
 
 /****************************************************************************
@@ -142,60 +126,9 @@ static inline void enableInterrupts()
  ****************************************************************************/
 static inline bool disableInterrupts()
 {
-   unsigned long cpsr;
-   __asm__ __volatile__("mrs %0, CPSR" : "=r" (cpsr));
-   __asm__ __volatile__("msr CPSR, %0" : : "r" (cpsr | CPU_I_BIT) :
-                        "memory");
-   return (cpsr & CPU_I_BIT) ? false : true;
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-static inline int cpuID()
-{
-#ifdef SMP
-   int id;
-   __asm__ volatile("mrc p15, 0, %0, c0, c0, 5" : "=r" (id));
-   return (id & 3);
-#else
-   return 0;
-#endif
-}
-
-#ifdef SMP
-/****************************************************************************
- *
- ****************************************************************************/
-void testAndSet(unsigned int* ptr, unsigned int a, unsigned int b);
-#endif
-
-/****************************************************************************
- *
- ****************************************************************************/
-static inline unsigned short bSwap16(unsigned short value)
-{
-   value = (value >> 8) | (value << 8);
-   return value;
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-static inline unsigned long bSwap32(unsigned long value)
-{
-   unsigned long tmp = 0;
-
-   __asm__ __volatile__
-   (
-      "eor %0, %3, %3, ror #16 \n"
-      "bic %0, #0x00FF0000     \n"
-      "mov %1, %3, ror #8      \n"
-      "eor %1, %0, lsr #8      \n"
-      : "=r" (tmp), "=r" (value) : "0" (tmp), "1" (value)
-   );
-
-   return value;
+   bool enabled = interruptsEnabled();
+   __asm__ __volatile__("mvtipl %0" : : "i" (KERNEL_IPL) : "memory");
+  return enabled;
 }
 
 /****************************************************************************
