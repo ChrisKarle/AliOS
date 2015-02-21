@@ -18,13 +18,13 @@ Ports for the following are available.
 
    - AVR (only tested with Atmega1280)
    - ARM (only tested with QEMU versatilepb & vexpress-a9)
+   - RX62N tested on RDKRX62N eval board
 
 Current work...
 
-   - Renesas RX port (eval board)
+   - embedded Python
 
 Future work...
 
-   - embedded Python (yes, for real)
    - port dropbear (SSH)
    - more ports (Renesas RL)
