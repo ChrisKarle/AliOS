@@ -22,6 +22,7 @@ Ports for the following are available.
 
 Current work...
 
+   - add drivers for RDKRX62N eval board
    - embedded Python
 
 Future work...
