@@ -41,6 +41,19 @@
 #error TASK_NUM_PRIORITIES must be at least one.
 #endif
 
+/****************************************************************************
+ *
+ ****************************************************************************/
+#ifndef TASK_NUM_TASKDATA
+#define TASK_NUM_TASKDATA 0
+#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+#define TASK_FLAG_ALLOC 0x01
+#define TASK_FLAG_FREE  0x02
+
 #if TIMERS
 /****************************************************************************
  *
@@ -65,6 +78,15 @@ static Task* current = NULL;
 #endif
 #if TIMERS
 static Timer* timers[2] = {NULL, NULL};
+#endif
+#if TASK_NUM_TASKDATA > 0
+static struct
+{
+   TaskData* head;
+   TaskData* tail;
+   TaskData data[TASK_NUM_TASKDATA];
+
+} taskData = {NULL};
 #endif
 
 #if QUEUES
@@ -300,7 +322,7 @@ static void taskSwitch(Task* task, unsigned char state)
    if (_previous->state == TASK_STATE_END)
    {
 #ifdef kfree
-      unsigned short mask = TASK_FLAG_ALLOC | TASK_FLAG_FREE_ON_EXIT;
+      unsigned short mask = TASK_FLAG_ALLOC | TASK_FLAG_FREE;
 #endif
       _taskExit(_previous);
 #ifdef kfree
@@ -484,19 +506,11 @@ Task* taskCreate(const char* name, unsigned long stackSize, bool freeOnExit)
    task->stack.base = kmalloc(stackSize);
 
    if (freeOnExit)
-      task->flags |= TASK_FLAG_FREE_ON_EXIT;
+      task->flags |= TASK_FLAG_FREE;
 
    return task;
 }
 #endif
-
-/****************************************************************************
- *
- ****************************************************************************/
-Task* taskCurrent()
-{
-   return current;
-}
 
 /****************************************************************************
  *
@@ -678,6 +692,117 @@ void taskPriority(Task* task, unsigned char priority)
    kernelUnlock();
 }
 
+/****************************************************************************
+ *
+ ****************************************************************************/
+bool taskSetData(int id, void* ptr)
+{
+   TaskData* data = current->data;
+   TaskData* previous = NULL;
+
+   while (data != NULL)
+   {
+      if (data->id == id)
+         break;
+
+      previous = data;
+      data = data->next;
+   }
+
+   if (ptr != NULL)
+   {
+      if (data != NULL)
+      {
+         data->ptr = ptr;
+      }
+      else
+      {
+#if TASK_NUM_TASKDATA > 0
+         kernelLock();
+
+         if (taskData.head != NULL)
+         {
+            data = taskData.head;
+            taskData.head = taskData.head->next;
+         }
+
+         kernelUnlock();
+#endif
+#ifdef kmalloc
+         if (data == NULL)
+            data = kmalloc(sizeof(TaskData));
+#endif
+         if (data != NULL)
+         {
+            data->id = id;
+            data->ptr = ptr;
+            data->next = NULL;
+
+            if (previous != NULL)
+               previous->next = data;
+            else
+               current->data = data;
+         }
+      }
+   }
+   else if (data != NULL)
+   {
+      if (previous != NULL)
+         previous->next = data->next;
+      else
+         current->data = data->next;
+
+#if TASK_NUM_TASKDATA > 0
+      if ((data >= taskData.data) &&
+          (data < &taskData.data[TASK_NUM_TASKDATA]))
+      {
+         data->next = NULL;
+
+         kernelLock();
+
+         if ((taskData.head == NULL) || (taskData.tail == NULL))
+         {
+            taskData.head = data;
+            taskData.tail = data;
+         }
+         else
+         {
+            taskData.tail->next = data;
+            taskData.tail = data;
+         }
+
+         kernelUnlock();
+      }
+      else
+#endif
+      {
+#ifdef kfree
+         kfree(data);
+#endif
+      }
+   }
+
+   return data != NULL;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void* taskGetData(int id)
+{
+   TaskData* data = current->data;
+
+   while (data != NULL)
+   {
+      if (data->id == id)
+         return data->ptr;
+
+      data = data->next;
+   }
+
+   return NULL;
+}
+
 #if TASK_LIST
 /****************************************************************************
  *
@@ -838,6 +963,9 @@ void NORETURN taskExit()
 #endif
       if ((task != NULL) && (task != current))
       {
+         while (current->data != NULL)
+            taskSetData(current->data->id, NULL);
+
          current->state = TASK_STATE_END;
 
          if (task->state == TASK_STATE_READY)
@@ -1026,6 +1154,18 @@ void _taskTick(unsigned long _ticks)
 void taskInit(Task* task, const char* name, unsigned char priority,
               void* stackBase, unsigned long stackSize)
 {
+#if TASK_NUM_TASKDATA > 0
+   unsigned int i;
+
+   taskData.head = &taskData.data[0];
+   taskData.tail = &taskData.data[TASK_NUM_TASKDATA - 1];
+
+   for (i = 0; i < (TASK_NUM_TASKDATA - 1); i++)
+      taskData.data[i].next = &taskData.data[i + 1];
+
+   taskData.data[TASK_NUM_TASKDATA - 1].next = NULL;
+#endif
+
    task->name = name;
    task->state = TASK_STATE_RUN;
    task->priority = priority;

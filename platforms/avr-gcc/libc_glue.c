@@ -25,65 +25,71 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#ifndef SHELL_H
-#define SHELL_H
+#include <stdio.h>
+#include "kernel.h"
+#include "libc_glue.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-#include "board.h"
-
-/****************************************************************************
- * Set these appropriately for the amount of memory you want the shell to
- * use. (i.e. SHELL_HISTORY_SIZE * SHELL_MAX_LINE)
- ****************************************************************************/
-#ifndef SHELL_PROMPT
-#define SHELL_PROMPT       "$ "
-#endif
-
-#ifndef SHELL_HISTORY_SIZE
-#define SHELL_HISTORY_SIZE 2
-#endif
-
-#ifndef SHELL_MAX_LINE
-#define SHELL_MAX_LINE     80
-#endif
-
-#ifndef SHELL_MAX_ARGS
-#define SHELL_MAX_ARGS     10
-#endif
-
-/****************************************************************************
- * SHELL_GETCHAR_POLL - Set if your getchar routine returns EOF when no
- *                      character is ready.
- * SHELL_GETCHAR_ECHO - Set if the shell should echo the received character.
- ****************************************************************************/
-#ifndef SHELL_GETCHAR_POLL
-#define SHELL_GETCHAR_POLL 0
-#endif
-
-#ifndef SHELL_GETCHAR_ECHO
-#define SHELL_GETCHAR_ECHO 0
-#endif
+static CharDev* _dev = NULL;
 
 /****************************************************************************
  *
  ****************************************************************************/
-typedef struct
+static int _fputc(char c, FILE* stream)
 {
-   const char* name;
-   void (*fx)(int argc, char* argv[]);
+   CharDev* dev = taskGetData(TASK_CONSOLE_ID);
 
-} ShellCmd;
+   if (dev == NULL)
+      dev = _dev;
+
+   if (dev != NULL)
+   {
+      if (c == '\n')
+         dev->tx(dev, '\r');
+
+      dev->tx(dev, c);
+   }
+
+   return 0;
+}
 
 /****************************************************************************
  *
  ****************************************************************************/
-void shellHistoryCmd(int argc, char* argv[]);
+static int _fgetc(FILE* stream)
+{
+   CharDev* dev = taskGetData(TASK_CONSOLE_ID);
+   int c = EOF;
+
+   if (dev == NULL)
+      dev = _dev;
+
+   if (dev != NULL)
+   {
+      c = dev->rx(dev, true);
+
+      if (c == '\r')
+         c = '\n';
+   }
+
+   return c;
+}
 
 /****************************************************************************
  *
  ****************************************************************************/
-void shellRun(const ShellCmd* cmds);
+static FILE _stdin = FDEV_SETUP_STREAM(NULL, _fgetc, _FDEV_SETUP_READ);
+static FILE _stdout = FDEV_SETUP_STREAM(_fputc, NULL, _FDEV_SETUP_WRITE);
 
-#endif
+/****************************************************************************
+ *
+ ****************************************************************************/
+void libcInit(CharDev* dev)
+{
+   _dev = dev;
+   stdin = &_stdin;
+   stdout = &_stdout;
+   stderr = &_stdout;
+}

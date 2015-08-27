@@ -49,7 +49,7 @@
    0,                                                \
    {},                                               \
    {stackSize, (unsigned char[stackSize]) {}, NULL}, \
-   {},                                               \
+   NULL,                                             \
    NULL                                              \
 }
 
@@ -77,15 +77,14 @@
 /****************************************************************************
  *
  ****************************************************************************/
-#define TASK_FLAG_ALLOC        0x01
-#define TASK_FLAG_FREE_ON_EXIT 0x02
+typedef struct _TaskData
+{
+   int id;
+   void* ptr;
 
-/****************************************************************************
- *
- ****************************************************************************/
-#ifndef TASK_USER_DATA
-#define TASK_USER_DATA
-#endif
+   struct _TaskData* next;
+
+} TaskData;
 
 /****************************************************************************
  *
@@ -114,11 +113,7 @@ typedef struct _Task
 
    } stack;
 
-   struct
-   {
-	  TASK_USER_DATA;
-
-   } user;
+   TaskData* data;
 
    struct _Task* next;
 
@@ -137,17 +132,6 @@ typedef struct _Task
  ****************************************************************************/
 Task* taskCreate(const char* name, unsigned long stackSize, bool freeOnExit);
 #endif
-
-/****************************************************************************
- * Function: taskCurrent
- *    - Gets a pointer to the current task.
- * Returns:
- *    - pointer to current task
- * Notes:
- *    - Other than retrieving user data, there is really no need to access
- *      or modify any state information within the Task structure.
- ****************************************************************************/
-Task* taskCurrent();
 
 /****************************************************************************
  * Function: _taskStart
@@ -227,6 +211,33 @@ void taskSleep(unsigned long ticks);
  *    - NOT interrupt context safe.
  ****************************************************************************/
 void taskPriority(Task* task, unsigned char priority);
+
+/****************************************************************************
+ * Function: taskSetData
+ *    - Assign thread local data storage.
+ * Arguments:
+ *    id   - user specific identifier for data
+ *    ptr  - pointer to user data (NULL removes "id" from storage)
+ * Returns:
+ *    - true if storage space for user data available, false otherwise
+ * Notes:
+ *    - If this function returns false, you must define or increase
+ *      TASK_NUM_USERDATA (defaults to 0).
+ *    - interrupt context safe.
+ ****************************************************************************/
+bool taskSetData(int id, void* ptr);
+
+/****************************************************************************
+ * Function: taskGetData
+ *    - Retrieves thread local data storage.
+ * Arguments:
+ *    id   - user specific identifier for data
+ * Returns:
+ *    - pointer to data, NULL if "id" not found
+ * Notes:
+ *    - interrupt context safe.
+ ****************************************************************************/
+void* taskGetData(int id);
 
 /****************************************************************************
  *

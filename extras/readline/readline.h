@@ -1,5 +1,5 @@
 /****************************************************************************
- * Copyright (c) 2014, Christopher Karle
+ * Copyright (c) 2015, Christopher Karle
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,54 +25,48 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#ifndef BOARD_H
-#define BOARD_H
+#ifndef READLINE_H
+#define READLINE_H
+
+#include "board.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define MUTEX_TEST1_STACK_SIZE     256
-#define MUTEX_TEST2_STACK_SIZE     256
-#define QUEUE_TEST1_STACK_SIZE     256
-#define QUEUE_TEST2_STACK_SIZE     256
-#define SEMAPHORE_TEST1_STACK_SIZE 256
-#define SEMAPHORE_TEST2_STACK_SIZE 256
-#define SEMAPHORE_TEST3_STACK_SIZE 256
-#define TIMER_TEST1_STACK_SIZE     128
-#define TIMER_TEST2_STACK_SIZE     256
-
-/****************************************************************************
- * Note: Task preemption is rarely needed.
- ****************************************************************************/
-#define TASK_PREEMPTION  0
-#define TASK_LIST        1
-#define TASK_STACK_USAGE 1
-#define TASK0_STACK_SIZE 512
+#ifndef rl_realloc
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define TASK_HIGH_PRIORITY  0
-#define TASK_LOW_PRIORITY   1
-#define TASK_NUM_PRIORITIES 2
+#define rl_free(ptr);
 
 /****************************************************************************
  *
  ****************************************************************************/
-#if TASK_PREEMPTION
-#define taskPreempt(f) _taskPreempt(f)
-#else
-#define taskPreempt(f)
+#ifndef READLINE_DATA_ID
+#define READLINE_DATA_ID -2
 #endif
 
 /****************************************************************************
  *
  ****************************************************************************/
-void taskTimer(unsigned long ticks);
+#define READLINE_DATA(n) {0, n, (char[n]) {}}
 
 /****************************************************************************
  *
  ****************************************************************************/
-void taskWait();
+typedef struct
+{
+   unsigned int i;
+   unsigned int size;
+   char* buffer;
+
+} ReadlineData;
+#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+char* readline(const char* prompt);
 
 #endif

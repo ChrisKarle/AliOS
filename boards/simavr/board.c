@@ -30,15 +30,17 @@
 #include <avr/io.h>
 #include <avr/sleep.h>
 #include <stdio.h>
-#include "avr_uart0.h"
 #include "board.h"
 #include "kernel.h"
 #include "libc_glue.h"
 #include "mutex_test.h"
 #include "queue_test.h"
+#include "readline/history.h"
+#include "readline/readline.h"
 #include "semaphore_test.h"
-#include "shell.h"
+#include "shell/shell.h"
 #include "timer_test.h"
+#include "uart/avr_uart0.h"
 
 /****************************************************************************
  *
@@ -70,6 +72,12 @@ static const ShellCmd SHELL_CMDS[] =
  *
  ****************************************************************************/
 extern uint8_t __stack[];
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static ReadlineData readlineData = READLINE_DATA(256);
+static HistoryData historyData = HISTORY_DATA(4);
 static Task task;
 static CharDev uart0;
 
@@ -192,6 +200,9 @@ int main()
    queueTest();
    semaphoreTest();
    timerTest();
+
+   taskSetData(READLINE_DATA_ID, &readlineData);
+   taskSetData(HISTORY_DATA_ID, &historyData);
 
    shellRun(SHELL_CMDS);
 

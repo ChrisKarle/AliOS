@@ -25,74 +25,61 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#include <stdio.h>
-#include "libc_glue.h"
+#ifndef BOARD_H
+#define BOARD_H
+
+#include <stdlib.h>
 
 /****************************************************************************
  *
  ****************************************************************************/
-static CharDev* _dev = NULL;
+#define MUTEX_TEST1_STACK_SIZE     256
+#define MUTEX_TEST2_STACK_SIZE     256
+#define QUEUE_TEST1_STACK_SIZE     256
+#define QUEUE_TEST2_STACK_SIZE     256
+#define SEMAPHORE_TEST1_STACK_SIZE 256
+#define SEMAPHORE_TEST2_STACK_SIZE 256
+#define SEMAPHORE_TEST3_STACK_SIZE 256
+#define TIMER_TEST1_STACK_SIZE     128
+#define TIMER_TEST2_STACK_SIZE     256
+
+/****************************************************************************
+ * Note: Task preemption is rarely needed.
+ ****************************************************************************/
+#define TASK_PREEMPTION  0
+#define TASK_LIST        1
+#define TASK_STACK_USAGE 1
+#define TASK0_STACK_SIZE 512
 
 /****************************************************************************
  *
  ****************************************************************************/
-static int _fputc(char c, FILE* stream)
-{
-   CharDev* dev = _dev;
+#define TASK_HIGH_PRIORITY  0
+#define TASK_LOW_PRIORITY   1
+#define TASK_NUM_PRIORITIES 2
 
-#ifdef TASK_CONSOLE
-   if (taskCurrent()->user.TASK_CONSOLE != NULL)
-      dev = taskCurrent()->user.TASK_CONSOLE;
+/****************************************************************************
+ *
+ ****************************************************************************/
+#define TASK_NUM_TASKDATA 2
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+#if TASK_PREEMPTION
+#define taskPreempt(f) _taskPreempt(f)
+#else
+#define taskPreempt(f)
 #endif
 
-   if (dev != NULL)
-   {
-      if (c == '\n')
-         dev->tx(dev, '\r');
-
-      dev->tx(dev, c);
-   }
-
-   return 0;
-}
+/****************************************************************************
+ *
+ ****************************************************************************/
+void taskTimer(unsigned long ticks);
 
 /****************************************************************************
  *
  ****************************************************************************/
-static int _fgetc(FILE* stream)
-{
-   CharDev* dev = _dev;
-   int c = EOF;
+void taskWait();
 
-#ifdef TASK_CONSOLE
-   if (taskCurrent()->user.TASK_CONSOLE != NULL)
-      dev = taskCurrent()->user.TASK_CONSOLE;
 #endif
-
-   if (dev != NULL)
-   {
-      c = dev->rx(dev, true);
-
-      if (c == '\r')
-         c = '\n';
-   }
-
-   return c;
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-static FILE _stdin = FDEV_SETUP_STREAM(NULL, _fgetc, _FDEV_SETUP_READ);
-static FILE _stdout = FDEV_SETUP_STREAM(_fputc, NULL, _FDEV_SETUP_WRITE);
-
-/****************************************************************************
- *
- ****************************************************************************/
-void libcInit(CharDev* __dev)
-{
-   _dev = __dev;
-   stdin = &_stdin;
-   stdout = &_stdout;
-   stderr = &_stdout;
-}

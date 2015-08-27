@@ -28,8 +28,8 @@
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include <stdio.h>
-#include "avr_uart0.h"
 #include "kernel.h"
+#include "avr_uart0.h"
 
 /****************************************************************************
  *
