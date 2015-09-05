@@ -69,19 +69,18 @@ debug: $(BIN_FILE)
 ##############################################################################
 #
 ##############################################################################
-C_FLAGS = -Wall -Wno-main -Wno-address -Os -mcpu=cortex-a9 -DSMP=2
-LD_FLAGS = -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
+#C_FLAGS = -Wall -Wno-main -Wno-address -Os -mcpu=cortex-a9 -DSMP=2
+C_FLAGS = -g -Wall -Wno-main -Wno-address -mcpu=cortex-a9 -DSMP=2
+LD_FLAGS = -nostartfiles -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I.
 C_FILES = board.c
 S_FILES = board_smp.S
 
-#   C_FLAGS += -mcpu=cortex-a9 -DTIMER_BASE=0x10011000 -DTIMER_IRQ=34 \
-#              -DUART_BASE=0x10009000 -DUART_IRQ=37 -DSMP=2
-
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../platform/arm-gcc
+VPATH += ../../platforms/arm-gcc
+INCLUDES += -I../../platforms/arm-gcc
 C_FILES += platform.c gic.c libc_glue.c
 S_FILES += platform_asm.S
 
@@ -89,33 +88,35 @@ S_FILES += platform_asm.S
 #
 ##############################################################################
 VPATH += ../../kernel
+INCLUDES += -I../../kernel
 C_FILES += kernel.c
 
 ##############################################################################
 #
 ##############################################################################
-INCLUDES += -I../../drivers
-VPATH += ../../drivers/uart
 VPATH += ../../drivers/timer
+VPATH += ../../drivers/uart
+INCLUDES += -I../../drivers
 C_FILES += pl011.c sp804.c
 
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../apps/shell
-C_FILES += shell.c
+VPATH += ../../extras/readline
+VPATH += ../../extras/shell
+INCLUDES += -I../../extras
+C_FILES += readline.c shell.c
 
 ##############################################################################
 #
 ##############################################################################
 VPATH += ../../tests
+INCLUDES += -I../../tests
 C_FILES += timer_test.c queue_test.c semaphore_test.c mutex_test.c
 
 ##############################################################################
 #
 ##############################################################################
-INCLUDES += $(addprefix -I,$(VPATH))
-
 OBJ_FILES = $(C_FILES:%.c=%.o)
 OBJ_FILES += $(S_FILES:%.S=%.o)
 DEP_FILES = $(C_FILES:%.c=%.d)

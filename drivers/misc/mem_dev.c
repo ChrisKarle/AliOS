@@ -32,18 +32,15 @@
 /****************************************************************************
  *
  ****************************************************************************/
-static unsigned long write(BlockDev* dev, unsigned long offset,
-                           const void* ptr, unsigned long count)
+static unsigned long write(BlockDev* dev, const void* ptr,
+                           unsigned long offset, unsigned long count)
 {
-   MemDev* memDev = (MemDev*) dev;
+   MemDev* mem = (MemDev*) dev;
 
-   if (offset >= memDev->dev.numBlocks)
-      return 0;
+   if ((offset + count) > mem->dev.numBlocks)
+      count = mem->dev.numBlocks - offset;
 
-   if ((offset + count) > memDev->dev.numBlocks)
-      count = memDev->dev.numBlocks - offset;
-
-   memcpy(&((uint8_t*) memDev->base)[offset], ptr, count);
+   memcpy(&((uint8_t*) mem->base)[offset], ptr, count);
 
    return count;
 }
@@ -51,18 +48,15 @@ static unsigned long write(BlockDev* dev, unsigned long offset,
 /****************************************************************************
  *
  ****************************************************************************/
-static unsigned long read(BlockDev* dev, unsigned long offset, void* ptr,
+static unsigned long read(BlockDev* dev, void* ptr, unsigned long offset,
                           unsigned long count)
 {
-   MemDev* memDev = (MemDev*) dev;
+   MemDev* mem = (MemDev*) dev;
 
-   if (offset >= memDev->dev.numBlocks)
-      return 0;
+   if ((offset + count) > mem->dev.numBlocks)
+      count = mem->dev.numBlocks - offset;
 
-   if ((offset + count) > memDev->dev.numBlocks)
-      count = memDev->dev.numBlocks - offset;
-
-   memcpy(ptr, &((uint8_t*) memDev->base)[offset], count);
+   memcpy(ptr, &((uint8_t*) mem->base)[offset], count);
 
    return count;
 }
@@ -70,15 +64,16 @@ static unsigned long read(BlockDev* dev, unsigned long offset, void* ptr,
 /****************************************************************************
  *
  ****************************************************************************/
-void memDevInit(MemDev* memDev, void* base, unsigned int size)
+void memDevInit(MemDev* mem, void* base, unsigned long size)
 {
-   memDev->dev.erase = NULL;
-   memDev->dev.write = write;
-   memDev->dev.read = read;
+   mem->dev.ioctl = NULL;
+   mem->dev.erase = NULL;
+   mem->dev.write = write;
+   mem->dev.read = read;
 
-   memDev->dev.blockSize.erase = 0;
-   memDev->dev.blockSize.write = 1;
+   mem->dev.blockSize.erase = 0;
+   mem->dev.blockSize.write = 1;
 
-   memDev->dev.numBlocks = size;
-   memDev->base = base;
+   mem->dev.numBlocks = size;
+   mem->base = base;
 }

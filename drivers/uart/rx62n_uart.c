@@ -197,6 +197,7 @@ void uartInit(UART* uart, unsigned long clk, unsigned long baud, int dps)
 
    MSTPCRB &= ~(1 << (31 - uart->id));
 
+   uart->dev.ioctl = NULL;
    uart->dev.tx = tx;
    uart->dev.rx = rx;
    uart->dev.timeout.tx = -1;

@@ -936,11 +936,47 @@ void taskList()
 }
 #endif
 
+#if TASK_AT_EXIT && defined(kmalloc)
+/****************************************************************************
+ *
+ ****************************************************************************/
+int taskAtExit(void (*callback)())
+{
+   void (**fx)() = kmalloc((current->exit.size + 1) * sizeof(void (*)()));
+   unsigned int i;
+
+   fx[current->exit.size] = callback;
+
+   for (i = 0; i < current->exit.size; i++)
+      fx[i] = current->exit.fx[i];
+
+#ifdef kfree
+   kfree(current->exit.fx);
+#endif
+
+   current->exit.fx = fx;
+   current->exit.size++;
+
+   return 0;
+}
+#endif
+
 /****************************************************************************
  *
  ****************************************************************************/
 void NORETURN taskExit()
 {
+#if TASK_AT_EXIT
+   while (current->exit.size > 0)
+      current->exit.fx[--current->exit.size]();
+#ifdef kfree
+   kfree(current->exit.fx);
+#endif
+#endif
+
+   while (current->data != NULL)
+      taskSetData(current->data->id, NULL);
+
    kernelLock();
 
    for (;;)
@@ -963,9 +999,6 @@ void NORETURN taskExit()
 #endif
       if ((task != NULL) && (task != current))
       {
-         while (current->data != NULL)
-            taskSetData(current->data->id, NULL);
-
          current->state = TASK_STATE_END;
 
          if (task->state == TASK_STATE_READY)

@@ -25,7 +25,7 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
-#include <string.h>
+#include <stdint.h>
 #include "platform.h"
 #include "romfs.h"
 
@@ -51,236 +51,142 @@
 /****************************************************************************
  *
  ****************************************************************************/
-static void romfsRoot(FS* fs)
+typedef struct
 {
-   ROMFS* romfs = (ROMFS*) fs;
+   BlockDev* dev;
+   uint32_t root;
 
-   romfs->cwd = romfs->root;
+} ROMFS;
 
-   if (!romfs->open)
+/****************************************************************************
+ *
+ ****************************************************************************/
+static uint32_t romfsInodeEnd(BlockDev* dev, uint32_t inode)
+{
+   uint8_t c;
+
+   inode += 16;
+
+   do
    {
-      romfs->ptr = romfs->root;
-      romfs->offset = 0;
-   }
+      dev->read(dev, &c, inode++, 1);
+
+   } while (c != '\0');
+
+   if (inode % 16)
+      inode += 16 - (inode % 16);
+
+   return inode;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static bool romfsOpen(FS* fs)
+static int romfsPathCmp(BlockDev* dev, uint32_t inode, const vfs_char_t* name)
 {
-   ROMFS* romfs = (ROMFS*) fs;
+   uint8_t c;
+
+   if (name == NULL)
+      return 1;
+
+   dev->read(dev, &c, inode + 16, 1);
+
+   while ((c != '\0') && (*name != '\0'))
+   {
+      if ((vfs_char_t) c != *name)
+         break;
+
+      dev->read(dev, &c, ++inode + 16, 1);
+      name++;
+   }
+
+   return (int) c - (int) *name;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static vfs_char_t* romfsPath(BlockDev* dev, uint32_t inode)
+{
+   vfs_char_t* path = NULL;
+   unsigned int i = 0;
+   uint8_t c;
+
+   do
+   {
+      dev->read(dev, &c, inode + 16 + i, 1);
+      path = realloc(path, (i + 1) * sizeof(vfs_char_t));
+      path[i++] = (vfs_char_t) c;
+
+   } while (c != '\0');
+
+   return path;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static int romfsOpen(VFS* vfs, void* dir, void** file,
+                     const vfs_char_t* name)
+{
+   int status = VFS_SUCCESS;
+   ROMFS* romfs = vfs->data;
+   uint32_t inode;
    uint32_t type;
 
-   if (romfs->open)
-      return false;
-
-   romfs->dev->read(romfs->dev, romfs->ptr, &type, 4);
-   type = be32toh(type) & INODE_TYPE;
-
-   if (type == INODE_HARD_LINK)
+   if (dir != NULL)
    {
-      romfs->dev->read(romfs->dev, romfs->ptr + 4, &romfs->ptr, 4);
-      romfs->ptr = be32toh(romfs->ptr) & ~INODE_MASK;
-      romfs->dev->read(romfs->dev, romfs->ptr, &type, 4);
+      inode = *(uint32_t*) dir;
+
+      romfs->dev->read(romfs->dev, &type, inode, 4);
       type = be32toh(type) & INODE_TYPE;
-   }
 
-   switch (type)
-   {
-      case INODE_DIRECTORY:
-         romfs->dev->read(romfs->dev, romfs->ptr + 4, &romfs->ptr, 4);
-         romfs->cwd = be32toh(romfs->ptr) & ~INODE_MASK;
-         romfs->ptr = romfs->cwd;
-         romfs->offset = 0;
-         break;
-
-      case INODE_REG_FILE:
+      if (type == INODE_DIRECTORY)
       {
-         uint32_t i = 0;
-         char c;
+         romfs->dev->read(romfs->dev, &inode, inode + 4, 4);
+         inode = be32toh(inode);
 
-         do
+         while (inode)
          {
-            romfs->dev->read(romfs->dev, romfs->ptr + 16 + i++, &c, 1);
+            if (romfsPathCmp(romfs->dev, inode, name) == 0)
+               break;
 
-         } while (c != '\0');
+            romfs->dev->read(romfs->dev, &inode, inode, 4);
+            inode = be32toh(inode) & ~INODE_MASK;
+         }
 
-         if (i % 16)
-            i += 16 - (i % 16);
-
-         romfs->open = romfs->ptr + 16 + i;
-         romfs->offset = 0;
-         break;
-      }
-
-      default:
-         return false;
-   }
-
-   return true;
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-static void romfsClose(FS* fs)
-{
-   ROMFS* romfs = (ROMFS*) fs;
-
-   romfs->ptr = romfs->cwd;
-   romfs->open = 0;
-   romfs->offset = 0;
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-static unsigned long romfsRead(FS* fs, void* buffer, unsigned long count)
-{
-   ROMFS* romfs = (ROMFS*) fs;
-
-   if (romfs->open)
-   {
-      uint32_t size;
-
-      romfs->dev->read(romfs->dev, romfs->ptr + 8, &size, 4);
-      size = be32toh(size);
-
-      if ((size - romfs->offset) < count)
-         count = size - romfs->offset;
-
-      count = romfs->dev->read(romfs->dev, romfs->open + romfs->offset,
-                               buffer, count);
-
-      romfs->offset += count;
-   }
-   else
-   {
-      if (romfs->ptr)
-      {
-         unsigned long i = 0;
-         char c;
-
-         do
-         {
-            romfs->dev->read(romfs->dev, romfs->ptr + 16 + i, &c, 1);
-
-            if (i < count)
-               ((char*) buffer)[i] = c;
-
-            i++;
-
-         } while (c != '\0');
-
-         count = i;
-
-         romfs->dev->read(romfs->dev, romfs->ptr, &romfs->ptr, 4);
-         romfs->ptr = be32toh(romfs->ptr) & ~INODE_MASK;
-         romfs->offset++;
+         if (!inode)
+            status = VFS_PATH_NOT_FOUND;
       }
       else
       {
-         count = 0;
+         status = VFS_INVALID_OPERATION;
       }
    }
-
-   return count;
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-static bool romfsSeek(FS* fs, unsigned long offset, int whence)
-{
-   ROMFS* romfs = (ROMFS*) fs;
-   bool status = true;
-   uint32_t type;
-   uint32_t size;
-   unsigned long i;
-
-   if (romfs->ptr)
+   else
    {
-      romfs->dev->read(romfs->dev, romfs->ptr, &type, 4);
+      inode = romfs->root;
+   }
+
+   if (status == VFS_SUCCESS)
+   {
+      uint32_t* ptr = malloc(4);
+
+      romfs->dev->read(romfs->dev, &type, inode, 4);
       type = be32toh(type) & INODE_TYPE;
 
       if (type == INODE_HARD_LINK)
       {
-         uint32_t ptr;
-         romfs->dev->read(romfs->dev, romfs->ptr + 4, &ptr, 4);
-         ptr = be32toh(ptr) & ~INODE_MASK;
-         romfs->dev->read(romfs->dev, ptr, &type, 4);
-         type = be32toh(type) & INODE_TYPE;
+         romfs->dev->read(romfs->dev, &inode, inode + 4, 4);
+         inode = be32toh(inode);
       }
 
-      romfs->dev->read(romfs->dev, romfs->ptr + 8, &size, 4);
-      size = be32toh(size);
+      *ptr = inode;
+      *file = ptr;
    }
    else
    {
-      type = INODE_DIRECTORY;
-      size = 0;
-   }
-
-   switch (whence)
-   {
-      case FS_SEEK_CUR:
-         switch (type)
-         {
-            case INODE_DIRECTORY:
-               for (i = 0; (i < offset) && status; i++)
-                  status = romfsRead(fs, NULL, 0) > 0;
-               break;
-
-            case INODE_REG_FILE:
-               if ((romfs->offset + offset) < size)
-                  romfs->offset += offset;
-               else
-                  status = false;
-               break;
-         }
-         break;
-
-      case FS_SEEK_SET:
-         switch (type)
-         {
-            case INODE_DIRECTORY:
-               romfs->ptr = romfs->cwd;
-               romfs->offset = 0;
-               for (i = 0; (i < offset) && status; i++)
-                  status = romfsRead(fs, NULL, 0) > 0;
-               break;
-
-            case INODE_REG_FILE:
-               if (offset < size)
-                  romfs->offset = offset;
-               else
-                  status = false;
-               break;
-         }
-         break;
-
-      case FS_SEEK_END:
-         switch (type)
-         {
-            case INODE_DIRECTORY:
-               if (offset == 0)
-                  while (romfsRead(fs, NULL, 0));
-               else
-                  status = false;
-               break;
-
-            case INODE_REG_FILE:
-               if (offset == 0)
-                  romfs->offset = size;
-               else
-                  status = false;
-               break;
-         }
-         break;
-
-      default:
-         status = false;
+      *file = NULL;
    }
 
    return status;
@@ -289,87 +195,150 @@ static bool romfsSeek(FS* fs, unsigned long offset, int whence)
 /****************************************************************************
  *
  ****************************************************************************/
-static unsigned long romfsTell(FS* fs)
+static void romfsClose(VFS* vfs, void* file)
 {
-   return ((ROMFS*) fs)->offset;
+   free(file);
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static int romfsName(FS* fs, const char* buffer, unsigned int* count)
+static int romfsCreate(VFS* vfs, void* dir, void** file,
+                       const vfs_char_t* name, unsigned int mode)
 {
-   ROMFS* romfs = (ROMFS*) fs;
-   unsigned int i = 0;
-   uint32_t type;
+   *file = NULL;
+   return VFS_INVALID_OPERATION;
+}
 
-   romfs->dev->read(romfs->dev, romfs->ptr, &type, 4);
-   type = be32toh(type) & INODE_TYPE;
+/****************************************************************************
+ *
+ ****************************************************************************/
+static int romfsMove(VFS* vfs, void* dir1, void* file1, void* dir2,
+                     void** file2, const vfs_char_t* name)
+{
+   *file2 = NULL;
+   return VFS_INVALID_OPERATION;
+}
 
-   if (type == INODE_HARD_LINK)
+/****************************************************************************
+ *
+ ****************************************************************************/
+static int romfsUnlink(VFS* vfs, void* dir, void* file)
+{
+   return VFS_INVALID_OPERATION;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static vfs_char_t* romfsIter(VFS* vfs, void* dir, void** iter)
+{
+   vfs_char_t* name = NULL;
+   ROMFS* romfs = vfs->data;
+   uint32_t inode;
+
+   if (*iter != NULL)
    {
-      uint32_t ptr;
-      romfs->dev->read(romfs->dev, romfs->ptr + 4, &ptr, 4);
-      ptr = be32toh(ptr) & ~INODE_MASK;
-      romfs->dev->read(romfs->dev, ptr, &type, 4);
-      type = be32toh(type) & INODE_TYPE;
-   }
+      inode = *(uint32_t*) *iter;
+      romfs->dev->read(romfs->dev, &inode, inode, 4);
+      inode = be32toh(inode) & ~INODE_MASK;
 
-   for (;;)
-   {
-      char c;
-
-      romfs->dev->read(romfs->dev, romfs->ptr + 16 + i, &c, 1);
-
-      if (c == '\0')
+      if (inode)
       {
-         if (buffer[i] == '\0')
-            break;
-         if ((buffer[i] == FS_PATH_SEP) && (type == INODE_DIRECTORY))
-            break;
+         name = romfsPath(romfs->dev, inode);
+         *(uint32_t*) *iter = inode;
       }
+      else
+      {
+         free(*iter);
+         *iter = NULL;
+      }
+   }
+   else
+   {
+      uint32_t type;
 
-      if (c != buffer[i])
-         return c - buffer[i];
+      inode = *(uint32_t*) dir;
 
-      i++;
+      romfs->dev->read(romfs->dev, &type, inode, 4);
+      type = be32toh(type) & INODE_TYPE;
+
+      if (type == INODE_DIRECTORY)
+      {
+         romfs->dev->read(romfs->dev, &inode, inode + 4, 4);
+         inode = be32toh(inode);
+
+         if (inode)
+         {
+            name = romfsPath(romfs->dev, inode);
+            *iter = malloc(4);
+            *(uint32_t*) *iter = inode;
+         }
+      }
    }
 
-   if (count != NULL)
-      *count = i;
+   return name;
+}
 
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void romfsIterStop(VFS* vfs, void* dir, void* iter)
+{
+   free(iter);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+unsigned long romfsRead(VFS* vfs, void* file, void* buffer,
+                         unsigned long offset, unsigned long count)
+{
+   ROMFS* romfs = vfs->data;
+   uint32_t inode = *(uint32_t*) file;
+   uint32_t size;
+
+   romfs->dev->read(romfs->dev, &size, inode + 8, 4);
+   size = be32toh(size);
+
+   inode = romfsInodeEnd(romfs->dev, inode);
+
+   if (offset > size)
+      offset = size;
+
+   if ((offset + count) > size)
+      count = size - offset;
+
+   count = romfs->dev->read(romfs->dev, buffer, inode + offset, count);
+
+   return count;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+unsigned long romfsWrite(VFS* vfs, void* file, const void* buffer,
+                         unsigned long offset, unsigned long count)
+{
    return 0;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-unsigned int romfsMode(FS* fs)
+static unsigned int romfsGetMode(VFS* vfs, void* file)
 {
-   ROMFS* romfs = (ROMFS*) fs;
-   unsigned int mode = FS_MODE_R;
+   unsigned int mode = VFS_MODE_R;
+   ROMFS* romfs = vfs->data;
    uint32_t type;
 
-   romfs->dev->read(romfs->dev, romfs->ptr, &type, 4);
-   type = be32toh(type);
-
-   if (type == INODE_HARD_LINK)
-   {
-      uint32_t ptr;
-      romfs->dev->read(romfs->dev, romfs->ptr + 4, &ptr, 4);
-      ptr = be32toh(ptr) & ~INODE_MASK;
-      romfs->dev->read(romfs->dev, ptr, &type, 4);
-      type = be32toh(type) & INODE_TYPE;
-   }
-
-   if (type & INODE_X)
-      mode |= FS_MODE_X;
+   romfs->dev->read(romfs->dev, &type, *(uint32_t*) file, 4);
+   type = be32toh(type) & INODE_MASK;
 
    if ((type & INODE_TYPE) == INODE_DIRECTORY)
-      mode |= FS_MODE_D | FS_MODE_X;
-
-   if (!romfs->open && ((romfs->offset == 0) || (romfs->offset == 1)))
-      mode |= FS_MODE_D | FS_MODE_X;
+      mode |= VFS_MODE_D | VFS_MODE_X;
+   else if (type & INODE_X)
+      mode |= VFS_MODE_X;
 
    return mode;
 }
@@ -377,48 +346,59 @@ unsigned int romfsMode(FS* fs)
 /****************************************************************************
  *
  ****************************************************************************/
-bool romfsPushd(FS* fs)
+static int romfsSetMode(VFS* vfs, void* file, unsigned int mode)
 {
-   ROMFS* romfs = (ROMFS*) fs;
-   romfs->pushd = romfs->cwd;
-   return true;
+   return VFS_INVALID_OPERATION;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-bool romfsPopd(FS* fs)
+static unsigned long romfsSize(VFS* vfs, void* file)
 {
-   ROMFS* romfs = (ROMFS*) fs;
+   ROMFS* romfs = vfs->data;
+   uint32_t size;
 
-   if (!romfs->pushd)
-      return false;
+   if (file != NULL)
+      romfs->dev->read(romfs->dev, &size, (*(uint32_t*) file) + 8, 4);
+   else
+      romfs->dev->read(romfs->dev, &size, 8, 4);
 
-   romfs->cwd = romfs->pushd;
+   size = be32toh(size);
 
-   if (!romfs->open)
-   {
-      romfs->ptr = romfs->pushd;
-      romfs->offset = 0;
-   }
-
-   romfs->pushd = 0;
-
-   return true;
+   return (unsigned long) size;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-bool romfsInit(ROMFS* romfs, BlockDev* dev)
+static void romfsTimes(VFS* vfs, void* file, uint64_t* otime,
+                       uint64_t* ctime, uint64_t* mtime, uint64_t* atime)
 {
+   if (otime != NULL)
+      *otime = 0;
+
+   if (ctime != NULL)
+      *ctime = 0;
+
+   if (mtime != NULL)
+      *mtime = 0;
+
+   if (atime != NULL)
+      *atime = 0;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+bool romfsInit(VFS* vfs, BlockDev* dev)
+{
+   ROMFS* romfs = NULL;
    uint32_t checksum = 0;
    uint32_t size;
-   uint32_t x;
    uint32_t i;
-   char c;
 
-   dev->read(dev, 8, &size, 4);
+   dev->read(dev, &size, 8, 4);
    size = be32toh(size);
 
    if (size > 512)
@@ -426,43 +406,38 @@ bool romfsInit(ROMFS* romfs, BlockDev* dev)
 
    for (i = 0; i < size; i += 4)
    {
-      dev->read(dev, i, &x, 4);
-      checksum += be32toh(x);
+      uint32_t value;
+      dev->read(dev, &value, i, 4);
+      checksum += be32toh(value);
    }
 
    if (checksum)
       return false;
 
-   i = 16;
-
-   do
-   {
-      dev->read(dev, i++, &c, 1);
-
-   } while (c != '\0');
-
-   if (i % 16)
-      i += 16 - (i % 16);
-
+   romfs = malloc(sizeof(ROMFS));
    romfs->dev = dev;
-   romfs->fs.root = romfsRoot;
-   romfs->fs.create = NULL;
-   romfs->fs.open = romfsOpen;
-   romfs->fs.close = romfsClose;
-   romfs->fs.read = romfsRead;
-   romfs->fs.write = NULL;
-   romfs->fs.seek = romfsSeek;
-   romfs->fs.tell = romfsTell;
-   romfs->fs.name = romfsName;
-   romfs->fs.mode = romfsMode;
-   romfs->fs.pushd = romfsPushd;
-   romfs->fs.popd = romfsPopd;
-   romfs->root = i;
-   romfs->pushd = 0;
-   romfs->cwd = i;
-   romfs->ptr = i;
-   romfs->open = 0;
-   romfs->offset = 0;
+   romfs->root = romfsInodeEnd(dev, 0);
+
+   vfs->open = romfsOpen;
+   vfs->close = romfsClose;
+
+   vfs->create = romfsCreate;
+   vfs->move = romfsMove;
+   vfs->unlink = romfsUnlink;
+
+   vfs->iter = romfsIter;
+   vfs->iterStop = romfsIterStop;
+
+   vfs->read = romfsRead;
+   vfs->write = romfsWrite;
+
+   vfs->getMode = romfsGetMode;
+   vfs->setMode = romfsSetMode;
+
+   vfs->size = romfsSize;
+   vfs->times = romfsTimes;
+
+   vfs->data = romfs;
 
    return true;
 }

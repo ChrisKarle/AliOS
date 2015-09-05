@@ -43,6 +43,6 @@ typedef struct
 /****************************************************************************
  *
  ****************************************************************************/
-void memDevInit(MemDev* memDev, void* base, unsigned int size);
+void memDevInit(MemDev* memDev, void* base, unsigned long size);
 
 #endif

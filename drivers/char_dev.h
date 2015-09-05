@@ -35,6 +35,8 @@
  ****************************************************************************/
 typedef struct _CharDev
 {
+   int (*ioctl)(struct _CharDev* dev, unsigned int req, ...);
+
    bool (*tx)(struct _CharDev* dev, int c);
    int (*rx)(struct _CharDev* dev, bool blocking);
 

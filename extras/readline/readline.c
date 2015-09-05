@@ -198,7 +198,7 @@ static void printVtCmd(char cmd, int arg0, int arg1)
 /****************************************************************************
  *
  ****************************************************************************/
-static void parseVtCmd(char c, int* state, char* cmd, int* arg0, int* arg1)
+static void parseVtCmd(int c, int* state, char* cmd, int* arg0, int* arg1)
 {
    if (c == VT_ESCAPE)
    {

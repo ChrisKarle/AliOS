@@ -29,16 +29,20 @@
 #define HTTP_SERVER_H
 
 #include "board.h"
-#include "fs.h"
 #include "lwip/tcpip.h"
 
 /****************************************************************************
- * The buffer size needs to be large enough to store any requested path and
- * arguments.
- *    e.g. /index.html?foo=1
+ *
  ****************************************************************************/
-#ifndef HTTP_BUFFER_SIZE
-#define HTTP_BUFFER_SIZE 256
+#ifndef HTTP_MAX_LINE
+#define HTTP_MAX_LINE 512
+#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+#ifndef HTTP_READ_SIZE
+#define HTTP_READ_SIZE 128
 #endif
 
 /****************************************************************************
@@ -53,15 +57,10 @@
  *
  ****************************************************************************/
 #define HTTP_RESPONSE_200 "HTTP/1.1 200 OK\r\n"
+#define HTTP_RESPONSE_400 "HTTP/1.1 400 Bad Request\r\n"
 #define HTTP_RESPONSE_404 "HTTP/1.1 404 Not Found\r\n"
+#define HTTP_RESPONSE_405 "HTTP/1.1 405 Method Not Allowed\r\n"
 #define HTTP_RESPONSE_500 "HTTP/1.1 500 Internal Server Error\r\n"
-
-/****************************************************************************
- *
- ****************************************************************************/
-#if HTTP_BUFFER_SIZE < 32
-#error HTTP_BUFFER_SIZE < 32
-#endif
 
 /****************************************************************************
  *
@@ -69,7 +68,7 @@
 typedef struct
 {
    const char* path;
-   void (*fx)(struct netconn* client, struct netbuf* netbuf, void* server);
+   void (*fx)(struct netconn* client, struct netbuf* netbuf);
 
 } HTTPCallback;
 
@@ -88,30 +87,32 @@ typedef struct
  ****************************************************************************/
 typedef struct
 {
-   FS* fs;
-   const HTTPCallback* callbacks;
    const HTTPContentType* types;
+   const HTTPCallback* callbacks;
+   const char* root;
    const char* index;
-   char buffer[HTTP_BUFFER_SIZE];
 
 } HTTPServer;
 
 /****************************************************************************
  *
  ****************************************************************************/
-int httpReqAction(struct netbuf* netbuf);
+char* httpGetLine(struct netbuf* netbuf, u16_t* offset);
 
 /****************************************************************************
  *
  ****************************************************************************/
-unsigned int httpReqPath(struct netbuf* netbuf, char* path,
-                         unsigned int length);
+int httpReqMethod(struct netbuf* netbuf);
 
 /****************************************************************************
  *
  ****************************************************************************/
-unsigned int httpReqParam(struct netbuf* netbuf, const char* param,
-                          char* value, unsigned int length);
+char* httpReqPath(struct netbuf* netbuf);
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+char* httpReqParam(struct netbuf* netbuf, const char* param);
 
 /****************************************************************************
  *
