@@ -72,7 +72,7 @@ debug: $(BIN_FILE)
 #
 ##############################################################################
 C_FLAGS = -Wall -Wno-main -Wno-address -Os -mcpu=arm926ej-s
-LD_FLAGS = -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
+LD_FLAGS = -nostartfiles -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I.
 BIN_FILES = fs_data.bin
 C_FILES = board.c
@@ -81,7 +81,8 @@ S_FILES =
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../platform/arm-gcc
+VPATH += ../../platforms/arm-gcc
+INCLUDES += -I../../platforms/arm-gcc
 C_FILES += platform.c vic.c sic.c libc_glue.c
 S_FILES += platform_asm.S
 
@@ -89,36 +90,38 @@ S_FILES += platform_asm.S
 #
 ##############################################################################
 VPATH += ../../kernel
+INCLUDES += -I../../kernel
 C_FILES += kernel.c
 
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../drivers
 VPATH += ../../drivers/fs
 VPATH += ../../drivers/misc
 VPATH += ../../drivers/net
 VPATH += ../../drivers/timer
 VPATH += ../../drivers/uart
-C_FILES += fs.c pl011.c sp804.c lan91c.c romfs.c mem_dev.c
+INCLUDES += -I../../drivers
+C_FILES += pl011.c sp804.c mem_dev.c vfs.c romfs.c lan91c.c
 
 ##############################################################################
 #
 ##############################################################################
-include ../../lwip/Makefile.inc
+include ../../extras/lwip/Makefile.inc
 
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../apps/http
-VPATH += ../../apps/shell
-C_FILES += http_server.c shell.c
+VPATH += ../../extras/fs_utils
+VPATH += ../../extras/http
+VPATH += ../../extras/readline
+VPATH += ../../extras/shell
+INCLUDES += -I../../extras
+C_FILES += shell.c readline.c fs_utils.c http_server.c
 
 ##############################################################################
 #
 ##############################################################################
-INCLUDES += $(addprefix -I,$(VPATH))
-
 OBJ_FILES += $(BIN_FILES:%.bin=%.o)
 OBJ_FILES += $(C_FILES:%.c=%.o)
 OBJ_FILES += $(S_FILES:%.S=%.o)

@@ -47,9 +47,10 @@
    TASK_STATE_END,                                   \
    0,                                                \
    0,                                                \
-   {},                                               \
    {stackSize, (unsigned char[stackSize]) {}, NULL}, \
+   {},                                               \
    NULL,                                             \
+   {},                                               \
    NULL                                              \
 }
 
@@ -77,6 +78,13 @@
 /****************************************************************************
  *
  ****************************************************************************/
+#ifndef TASK_AT_EXIT
+#define TASK_AT_EXIT 0
+#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 typedef struct _TaskData
 {
    int id;
@@ -98,6 +106,14 @@ typedef struct _Task
 
    struct
    {
+      unsigned long size;
+      void* base;
+      void* ptr;
+
+   } stack;
+
+   struct
+   {
       void* type;
       unsigned long timeout;
       void* ptr;
@@ -105,15 +121,15 @@ typedef struct _Task
 
    } wait;
 
+   TaskData* data;
+
    struct
    {
-      unsigned long size;
-      void* base;
-      void* ptr;
-
-   } stack;
-
-   TaskData* data;
+#if TASK_AT_EXIT
+      unsigned int size;
+      void (**fx)();
+#endif
+   } exit;
 
    struct _Task* next;
 
@@ -263,6 +279,21 @@ void* taskGetData(int id);
  *    - Can be useful for debugging.
  ****************************************************************************/
 void taskList();
+#endif
+
+#if TASK_AT_EXIT && defined(kmalloc)
+/****************************************************************************
+ * Function: taskAtExit
+ *    - Registers a function to be called when a thread exits.
+ * Arguments:
+ *    callback - callback function
+ * Returns:
+ *    - returns 0 on success, non-zero on error
+ * Notes:
+ *    - Callbacks are called in reverse registration order.
+ *    - Should not be called from interrupt context because of kmalloc usage.
+ ****************************************************************************/
+int taskAtExit(void (*callback)());
 #endif
 
 /****************************************************************************

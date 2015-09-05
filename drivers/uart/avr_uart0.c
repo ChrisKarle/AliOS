@@ -183,6 +183,7 @@ static int rx(CharDev* dev, bool blocking)
  ****************************************************************************/
 void uart0Init(CharDev* dev)
 {
+   dev->ioctl = NULL;
    dev->tx = tx;
    dev->rx = rx;
    dev->timeout.tx = -1;

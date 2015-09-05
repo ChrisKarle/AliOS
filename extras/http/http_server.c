@@ -29,6 +29,14 @@
 #include <stdio.h>
 #include <string.h>
 #include "http_server.h"
+#include "fs/vfs.h"
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+#if HTTP_READ_SIZE < 1
+#error HTTP_READ_SIZE < 1
+#endif
 
 /****************************************************************************
  *
@@ -40,7 +48,8 @@ static const HTTPContentType TYPES[] =
    {"jpg", "image/jpeg"},
    {"png", "image/png"},
    {"txt", "text/plain"},
-   {NULL, NULL}
+   {"xhtml", "text/html"},
+   {NULL, "application/octet-stream"}
 };
 
 /****************************************************************************
@@ -51,7 +60,7 @@ struct netconn* socket = NULL;
 /****************************************************************************
  *
  ****************************************************************************/
-static void netWriteStr(struct netconn* client, const char* str)
+static void httpPuts(struct netconn* client, const char* str)
 {
    unsigned int length = strlen(str);
 
@@ -65,364 +74,405 @@ static void netWriteStr(struct netconn* client, const char* str)
 static void httpReqProcess(struct netconn* client, struct netbuf* netbuf,
                            HTTPServer* server)
 {
-   char* buffer = server->buffer;
-   bool dynamic = false;
+   const HTTPContentType* type = TYPES;
+   char* path = NULL;
    char* ext = NULL;
+   bool xhtml = false;
+   unsigned char* buffer = NULL;
+   unsigned long count;
+   unsigned int length;
+   int method;
+   int fd;
 
    if (server == NULL)
    {
-      netWriteStr(client, HTTP_RESPONSE_500);
+      httpPuts(client, HTTP_RESPONSE_500);
       return;
    }
 
-   buffer[HTTP_BUFFER_SIZE - 1] = '\0';
-   httpReqPath(netbuf, buffer, HTTP_BUFFER_SIZE - 1);
+   method = httpReqMethod(netbuf);
 
-   if (buffer[strlen(buffer) - 1] == '/')
+   if (method == HTTP_REQUEST_NONE)
    {
-      if (server->index != NULL)
-         strncat(buffer, server->index, HTTP_BUFFER_SIZE);
-      else
-         strncat(buffer, "index.html", HTTP_BUFFER_SIZE);
+      httpPuts(client, HTTP_RESPONSE_405);
+      httpPuts(client, "Allow: GET, HEAD, PUT\r\n");
+      return;
+   }
+
+   path = httpReqPath(netbuf);
+
+   if (path == NULL)
+   {
+      httpPuts(client, HTTP_RESPONSE_400);
+      return;
+   }
+
+   length = strlen(path);
+
+   if (path[length - 1] == '/')
+   {
+      const char* index = server->index;
+      unsigned int i;
+
+      if (index == NULL)
+         index = "index.html";
+
+      i = strlen(index);
+      path = realloc(path, length + i + 1);
+      strcpy(&path[length], index);
+      length += i;
    }
 
    if (server->callbacks != NULL)
    {
-      const HTTPCallback* callback = server->callbacks;
+      const HTTPCallback* cb = server->callbacks;
 
-      while (callback->path != NULL)
+      while (cb->path != NULL)
       {
-         if (strcmp(buffer, callback->path) == 0)
+         if (strcmp(path, cb->path) == 0)
          {
-            callback->fx(client, netbuf, server);
+            cb->fx(client, netbuf);
+            free(path);
             return;
          }
 
-         callback++;
+         cb++;
       }
    }
 
-   if ((server->fs == NULL) || !fsOpen(server->fs, buffer))
+   if (server->root != NULL)
    {
-      netWriteStr(client, HTTP_RESPONSE_404);
+      unsigned int i = strlen(server->root);
+      char* path0 = malloc(i + length + 1);
+
+      strcpy(path0, server->root);
+      strcpy(&path0[i], path);
+      free(path);
+      path = path0;
+   }
+
+   fd = vfsOpen(path);
+
+   if (fd < 0)
+   {
+      httpPuts(client, HTTP_RESPONSE_404);
+      free(path);
       return;
    }
 
-   ext = strrchr(buffer, '.');
+   ext = strrchr(path, '.');
 
    if (ext != NULL)
    {
-      const char* content = "application/octet-stream";
-      const HTTPContentType* type = TYPES;
-
       ext++;
 
-      if (server->types != NULL)
-         type = server->types;
-
-      while (type->ext != NULL)
-      {
-         if (strcmp(ext, type->ext) == 0)
-            break;
-
-         type++;
-      }
-
-      netWriteStr(client, HTTP_RESPONSE_200);
-      netWriteStr(client, "Content-type: ");
-      netWriteStr(client, content);
-      netWriteStr(client, "\r\n\r\n");
-
       if (strcmp(ext, "xhtml") == 0)
-         dynamic = true;
+         xhtml = true;
    }
 
-   switch (httpReqAction(netbuf))
+   if (server->types != NULL)
+      type = server->types;
+
+   while (type->ext != NULL)
+   {
+      if ((ext != NULL) && (strcmp(ext, type->ext) == 0))
+         break;
+
+      type++;
+   }
+
+   httpPuts(client, HTTP_RESPONSE_200);
+   httpPuts(client, "Content-type: ");
+   httpPuts(client, type->str);
+   httpPuts(client, "\r\n\r\n");
+
+   buffer = malloc(HTTP_READ_SIZE);
+
+   switch (method)
    {
       case HTTP_REQUEST_GET:
-         if (dynamic && (server->callbacks != NULL))
+      case HTTP_REQUEST_PUT:
+         if (xhtml && (server->callbacks != NULL))
          {
-            bool state = false;
-            int i = 0;
+            int state = 0;
 
-            while (server->fs->read(server->fs, &buffer[i], 1) > 0)
+            free(path);
+            path = NULL;
+            length = 0;
+
+            while ((count = vfsRead(fd, buffer, HTTP_READ_SIZE)) > 0)
             {
-               i++;
+               unsigned long i = 0;
+               unsigned long j = 0;
+               unsigned long k;
 
-               if (state)
+               for (k = 0; k < count; k++)
                {
-                  if (i == HTTP_BUFFER_SIZE)
+                  switch (state)
                   {
-                     buffer[i - 2] = buffer[i - 1];
-                     i--;
-                  }
+                     case 0:
+                        if (buffer[k] == '<')
+                           state = 1;
+                        else
+                           j++;
+                        break;
 
-                  if ((i > 1) && (strncmp(&buffer[i - 2], "?>", 2) == 0))
-                  {
-                     const HTTPCallback* callback = server->callbacks;
-                     char* ptr = buffer;
-
-                     while (*ptr == ' ')
-                        ptr++;
-
-                     buffer[--i] = '\0';
-                     buffer[--i] = '\0';
-                     while ((i > 0) && (buffer[i - 1] == ' '))
-                        buffer[i - 1] = '\0';
-
-                     while (callback->path != NULL)
-                     {
-                        if (strcmp(ptr, callback->path) == 0)
+                     case 1:
+                        if (buffer[k] == '?')
                         {
-                           callback->fx(client, netbuf, server);
-                           break;
+                           netconn_write(client, &buffer[i], j, NETCONN_COPY);
+                           j = 0;
+                           state = 2;
                         }
+                        else
+                        {
+                           if (k == 0)
+                           {
+                              char c = '<';
+                              netconn_write(client, &c, 1, NETCONN_COPY);
+                           }
+                           else
+                           {
+                              j++;
+                           }
 
-                        callback++;
-                     }
+                           j++;
+                           state = 0;
+                        }
+                        break;
 
-                     state = false;
-                     i = 0;
+                     case 2:
+                        if (buffer[k] == '?')
+                        {
+                           state = 3;
+                        }
+                        else
+                        {
+                           path = realloc(path, length + 1);
+                           path[length++] = buffer[k];
+                        }
+                        break;
+
+                     case 3:
+                        if (buffer[k] == '>')
+                        {
+                           const HTTPCallback* cb = server->callbacks;
+                           char* path0 = NULL;
+
+                           path = realloc(path, length + 1);
+                           path[length] = '\0';
+
+                           path0 = path;
+
+                           while (path0[length - 1] == ' ')
+                              path0[--length] = '\0';
+
+                           while (*path0 == ' ')
+                              path0++;
+
+                           while (cb->path != NULL)
+                           {
+                              if (strcmp(path0, cb->path) == 0)
+                              {
+                                 cb->fx(client, netbuf);
+                                 break;
+                              }
+
+                              cb++;
+                           }
+
+                           free(path);
+                           path = NULL;
+
+                           i = k + 1;
+                           state = 0;
+                        }
+                        else
+                        {
+                           path = realloc(path, length + 2);
+                           path[length++] = '?';
+                           path[length++] = buffer[k];
+                           state = 2;
+                        }
+                        break;
                   }
                }
-               else
-               {
-                  if ((i > 1) && (strncmp(&buffer[i - 2], "<?", 2) == 0))
-                  {
-                     netconn_write(client, buffer, i - 2, NETCONN_COPY);
-                     state = true;
-                     i = 0;
-                  }
-               }
 
-               if (i == HTTP_BUFFER_SIZE)
-               {
-                  if (buffer[i - 1] == '<')
-                  {
-                     netconn_write(client, buffer, i - 1, NETCONN_COPY);
-                     buffer[0] = '<';
-                     i = 1;
-                  }
-                  else
-                  {
-                     netconn_write(client, buffer, i, NETCONN_COPY);
-                     i = 0;
-                  }
-               }
+               netconn_write(client, &buffer[i], j, NETCONN_COPY);
             }
-
-            netconn_write(client, buffer, i, NETCONN_COPY);
          }
          else
          {
-            FS* fs = server->fs;
-            unsigned long count;
-
-            while ((count = fs->read(fs, buffer, HTTP_BUFFER_SIZE)) > 0)
+            while ((count = vfsRead(fd, buffer, HTTP_READ_SIZE)) > 0)
                netconn_write(client, buffer, count, NETCONN_COPY);
          }
+         break;
 
       case HTTP_REQUEST_HEAD:
          break;
    }
 
-   server->fs->close(server->fs);
+   free(path);
+   free(buffer);
+   vfsClose(fd);
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-int httpReqAction(struct netbuf* netbuf)
+char* httpGetLine(struct netbuf* netbuf, u16_t* offset)
 {
+   char* line = NULL;
+   u16_t i = 0;
    char* data = NULL;
-   u16_t length;
+   u16_t length = 0;
 
-   netbuf_first(netbuf);
-   netbuf_data(netbuf, (void**) &data, &length);
+   do
+   {
+      netbuf_data(netbuf, (void**) &data, &length);
 
-   if (strncmp(data, "GET ", 4) == 0)
-      return HTTP_REQUEST_GET;
+      while (*offset < length)
+      {
+         line = realloc(line, i + 1);
+         line[i] = '\0';
 
-   if (strncmp(data, "HEAD ", 5) == 0)
-      return HTTP_REQUEST_HEAD;
+         if ((data[*offset] != '\r') && (i < HTTP_MAX_LINE))
+            line[i++] = data[(*offset)++];
+         else
+            return line;
+      }
 
-   if (strncmp(data, "PUT ", 4) == 0)
-      return HTTP_REQUEST_PUT;
+      *offset = 0;
 
-   return HTTP_REQUEST_NONE;
+   } while (netbuf_next(netbuf) < 0);
+
+   if (line != NULL)
+   {
+      line = realloc(line, i + 1);
+      line[i] = '\0';
+   }
+
+   return line;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-unsigned int httpReqPath(struct netbuf* netbuf, char* path,
-                         unsigned int length)
+int httpReqMethod(struct netbuf* netbuf)
 {
-   bool done = false;
-   unsigned int i = 0;
-   int state = 0;
+   int method = HTTP_REQUEST_NONE;
+   char* line = NULL;
+   u16_t offset = 0;
 
    netbuf_first(netbuf);
+   line = httpGetLine(netbuf, &offset);
 
-   do
+   if (line != NULL)
    {
-      char* data = NULL;
-      u16_t length = 0;
-      u16_t j = 0;
+      if (strncmp(line, "GET ", 4) == 0)
+         method = HTTP_REQUEST_GET;
+      else if (strncmp(line, "HEAD ", 5) == 0)
+         method = HTTP_REQUEST_HEAD;
+      else if (strncmp(line, "PUT ", 4) == 0)
+         method = HTTP_REQUEST_PUT;
 
-      netbuf_data(netbuf, (void**) &data, &length);
+      free(line);
+   }
 
-      while (!done && (j < length))
-      {
-         switch (state)
-         {
-            case 0:
-               if (data[j] == ' ')
-                  state++;
-               else
-                  j++;
-               break;
-
-            case 1:
-               if (data[j] != ' ')
-                  state++;
-               else
-                  j++;
-               break;
-
-            case 2:
-               if ((data[j] != ' ') && (data[j] != '?'))
-               {
-                  if (i < length)
-                     path[i] = data[j];
-
-                  i++;
-                  j++;
-               }
-               else
-               {
-                  done = true;
-               }
-               break;
-         }
-      }
-
-   } while (!done && (netbuf_next(netbuf) >= 0));
-
-   if (i < length)
-      path[i] = '\0';
-
-   return i;
+   return method;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-unsigned int httpReqParam(struct netbuf* netbuf, const char* param,
-                          char* value, unsigned int length)
+char* httpReqPath(struct netbuf* netbuf)
 {
-   bool done = false;
-   unsigned int i = 0;
-   unsigned int j = 0;
-   int state = 0;
+   char* path = NULL;
+   char* line = NULL;
+   u16_t offset = 0;
 
    netbuf_first(netbuf);
+   line = httpGetLine(netbuf, &offset);
 
-   do
+   if (line != NULL)
    {
-      char* data = NULL;
-      u16_t length = 0;
-      u16_t k = 0;
+      char* ptr = line;
+      strsep(&ptr, " ");
+      ptr = strsep(&ptr, " ?");
 
-      netbuf_data(netbuf, (void**) &data, &length);
-
-      while (!done && (k < length))
+      if (ptr != NULL)
       {
-         switch (state)
+         path = malloc(strlen(ptr) + 1);
+         strcpy(path, ptr);
+      }
+
+      free(line);
+   }
+
+   return path;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+char* httpReqParam(struct netbuf* netbuf, const char* param)
+{
+   char* value = NULL;
+   char* line = NULL;
+   u16_t offset = 0;
+
+   netbuf_first(netbuf);
+   line = httpGetLine(netbuf, &offset);
+
+   if (line != NULL)
+   {
+      char* ptr = line;
+      char* key = NULL;
+
+      if (strncmp(line, "GET ", 4) == 0)
+      {
+         strsep(&ptr, " ");
+         ptr = strsep(&ptr, " ");
+         strsep(&ptr, "?");
+         ptr = strsep(&ptr, "?");
+      }
+      else if (strncmp(line, "PUT ", 4) == 0)
+      {
+         do
          {
-            case 0:
-               if (data[k] == ' ')
-                  state++;
-               else
-                  k++;
-               break;
+            free(line);
+            line = httpGetLine(netbuf, &offset);
 
-            case 1:
-               if (data[k] != ' ')
-                  state++;
-               else
-                  k++;
-               break;
+         } while ((line != NULL) && (*line != '\0'));
 
-            case 2:
-               if (data[k] != ' ')
-               {
-                  if (data[k++] == '?')
-                     state++;
-               }
-               else
-               {
-                  done = true;
-               }
-               break;
+         free(line);
+         line = httpGetLine(netbuf, &offset);
+         ptr = line;
+      }
+      else
+      {
+         ptr = NULL;
+      }
 
-            case 3:
-               if ((data[k] == '=') && (j > 0))
-               {
-                  k++;
-                  state += 2;
-               }
-               else if (data[k] != param[j])
-               {
-                  state++;
-               }
-               else
-               {
-                  j++;
-                  k++;
-               }
-               break;
+      while ((key = strsep(&ptr, "&")) != NULL)
+      {
+         char* value0 = strchr(key, '=');
 
-            case 4:
-               if (data[k] == ' ')
-               {
-                  done = true;
-               }
-               else
-               {
-                  if (data[k] == '&')
-                  {
-                     state = 3;
-                     j = 0;
-                  }
+         if (value0 != NULL)
+            *value0++ = '\0';
 
-                  k++;
-               }
-               break;
-
-            case 5:
-               if ((data[k] != ' ') && (data[k] != '&'))
-               {
-                  if (i < length)
-                     value[i] = data[k];
-
-                  i++;
-                  k++;
-               }
-               else
-               {
-                  done = true;
-               }
-               break;
+         if ((strcmp(key, param) == 0) && (value0 != NULL))
+         {
+            value = malloc(strlen(value0) + 1);
+            strcpy(value, value0);
+            break;
          }
       }
 
-   } while (!done && (netbuf_next(netbuf) >= 0));
+      free(line);
+   }
 
-   if (i < length)
-      value[i] = '\0';
-
-   return i;
+   return value;
 }
 
 /****************************************************************************
@@ -454,8 +504,6 @@ void httpServerFx(void* server)
       netconn_close(client);
       netconn_delete(client);
    }
-
-   puts("http server shutdown");
 
    if (flag)
    {

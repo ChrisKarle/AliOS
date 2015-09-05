@@ -28,29 +28,13 @@
 #ifndef ROMFS_H
 #define ROMFS_H
 
-#include <stdint.h>
+#include <stdbool.h>
 #include "block_dev.h"
-#include "fs.h"
+#include "vfs.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-typedef struct
-{
-   FS fs;
-   BlockDev* dev;
-   uint32_t root;
-   uint32_t pushd;
-   uint32_t cwd;
-   uint32_t ptr;
-   uint32_t open;
-   unsigned long offset;
-
-} ROMFS;
-
-/****************************************************************************
- *
- ****************************************************************************/
-bool romfsInit(ROMFS* romfs, BlockDev* dev);
+bool romfsInit(VFS* vfs, BlockDev* dev);
 
 #endif

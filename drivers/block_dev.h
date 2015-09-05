@@ -33,12 +33,14 @@
  ****************************************************************************/
 typedef struct _BlockDev
 {
+   int (*ioctl)(struct _BlockDev* dev, unsigned int req, ...);
+
    unsigned long (*erase)(struct _BlockDev* dev, unsigned long offset,
                           unsigned long count);
-   unsigned long (*write)(struct _BlockDev* dev, unsigned long offset,
-                          const void* ptr, unsigned long count);
-   unsigned long (*read)(struct _BlockDev* dev, unsigned long offset,
-                         void* ptr, unsigned long count);
+   unsigned long (*write)(struct _BlockDev* dev, const void* ptr,
+                          unsigned long offset, unsigned long count);
+   unsigned long (*read)(struct _BlockDev* dev, void* ptr,
+                         unsigned long offset, unsigned long count);
 
    struct
    {

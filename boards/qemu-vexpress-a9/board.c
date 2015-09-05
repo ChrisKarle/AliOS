@@ -30,12 +30,13 @@
 #include "kernel.h"
 #include "libc_glue.h"
 #include "mutex_test.h"
-#include "pl011.h"
 #include "queue_test.h"
+#include "readline/history.h"
 #include "semaphore_test.h"
-#include "shell.h"
-#include "sp804.h"
+#include "shell/shell.h"
+#include "timer/sp804.h"
 #include "timer_test.h"
+#include "uart/pl011.h"
 
 /****************************************************************************
  *
@@ -69,6 +70,7 @@ static PL011 pl011 = PL011_CREATE
 );
 static SP804 sp804 = SP804_CREATE(0x10011000);
 static GIC gic = GIC_CREATE(0x1E000100, 0x1E001000);
+static HistoryData historyData = HISTORY_DATA(10);
 static Task task[SMP];
 
 /****************************************************************************
@@ -185,6 +187,8 @@ int main(void* stack, unsigned long size)
    queueTest();
    semaphoreTest();
    timerTest();
+
+   taskSetData(HISTORY_DATA_ID, &historyData);
 
    shellRun(SHELL_CMDS);
 

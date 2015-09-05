@@ -29,17 +29,20 @@
 #include <stdlib.h>
 #include <string.h>
 #include "board.h"
-#include "http_server.h"
+#include "fs/vfs.h"
+#include "fs/romfs.h"
+#include "fs_utils/fs_utils.h"
+#include "http/http_server.h"
 #include "kernel.h"
-#include "lan91c.h"
 #include "libc_glue.h"
 #include "lwip/tcpip.h"
-#include "mem_dev.h"
-#include "pl011.h"
-#include "romfs.h"
-#include "shell.h"
+#include "misc/mem_dev.h"
+#include "net/lan91c.h"
+#include "readline/history.h"
+#include "shell/shell.h"
 #include "sic.h"
-#include "sp804.h"
+#include "timer/sp804.h"
+#include "uart/pl011.h"
 #include "vic.h"
 
 /****************************************************************************
@@ -57,19 +60,22 @@ static PL011 pl011 = PL011_CREATE
    NULL,
    QUEUE_CREATE_PTR("pl011_rx", 1, 8)
 );
-static SP804 sp804 = SP804_CREATE(0x101E2000);
+
 static LAN91C lan91c = LAN91C_CREATE
 (
    0x10010000,
    TASK_CREATE_PTR("lan91c", 2048),
    TASK_HIGH_PRIORITY
 );
+
+static SP804 sp804 = SP804_CREATE(0x101E2000);
 static VIC vic = VIC_CREATE(0x10140000);
 static SIC sic = SIC_CREATE(0x10003000);
+static HistoryData historyData = HISTORY_DATA(10);
 static Task httpTask = TASK_CREATE("httpd", 2048);
 static Task mainTask;
 static MemDev memDev;
-static ROMFS romfs;
+static VFS vfs;
 static HTTPServer httpServer;
 
 /****************************************************************************
@@ -83,55 +89,21 @@ static void tlCmd(int argc, char* argv[])
 /****************************************************************************
  *
  ****************************************************************************/
-static void lsCmd(int argc, char* argv[])
-{
-   fsList(&romfs.fs);
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-static void cdCmd(int argc, char* argv[])
-{
-   const char* dir = "/";
-
-   if (argc > 1)
-      dir = argv[1];
-
-   fsOpen(&romfs.fs, dir);
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-static void catCmd(int argc, char* argv[])
-{
-   if (argc != 2)
-   {
-      printf("usage: %s <file>\n", argv[0]);
-      return;
-   }
-
-   fsCat(&romfs.fs, argv[1]);
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
 static const ShellCmd SHELL_CMDS[] =
 {
    {"tl", tlCmd},
-   {"ls", lsCmd},
-   {"cd", cdCmd},
-   {"cat", catCmd},
+   {"pwd", fsUtils_pwd},
+   {"cd", fsUtils_cd},
+   {"ls", fsUtils_ls},
+   {"cat", fsUtils_cat},
+   {"lsof", vfsInfo},
    {NULL, NULL}
 };
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void httpCounter(struct netconn* client, struct netbuf* netbuf,
-                        void* server)
+static void httpCounter(struct netconn* client, struct netbuf* netbuf)
 {
    static unsigned int i = 0;
    char str[16];
@@ -233,16 +205,19 @@ int main(void* stack, unsigned long size)
 
    memDevInit(&memDev, _binary_fs_data_bin_start,
               _binary_fs_data_bin_end - _binary_fs_data_bin_start);
-   romfsInit(&romfs, &memDev.dev);
+   romfsInit(&vfs, &memDev.dev);
+   vfsMount(&vfs, NULL);
 
-   memset(&httpServer, 0, sizeof(HTTPServer));
-   httpServer.fs = &romfs.fs;
+   httpServer.types = NULL;
    httpServer.callbacks = HTTP_CALLBACKS;
+   httpServer.root = NULL;
    httpServer.index = "index.xhtml";
    taskStart(&httpTask, httpServerFx, &httpServer, TASK_LOW_PRIORITY);
 
    puts("AliOS on ARM");
    enableInterrupts();
+
+   taskSetData(HISTORY_DATA_ID, &historyData);
 
    shellRun(SHELL_CMDS);
 

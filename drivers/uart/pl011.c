@@ -157,6 +157,7 @@ void pl011IRQ(unsigned int n, void* _pl011)
  ****************************************************************************/
 void pl011Init(PL011* pl011, unsigned long clk, unsigned long baud, int dps)
 {
+   pl011->dev.ioctl = NULL;
    pl011->dev.tx = tx;
    pl011->dev.rx = rx;
    pl011->dev.timeout.tx = -1;
