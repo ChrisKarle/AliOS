@@ -69,8 +69,7 @@ debug: $(BIN_FILE)
 ##############################################################################
 #
 ##############################################################################
-#C_FLAGS = -Wall -Wno-main -Wno-address -Os -mcpu=cortex-a9 -DSMP=2
-C_FLAGS = -g -Wall -Wno-main -Wno-address -mcpu=cortex-a9 -DSMP=2
+C_FLAGS = -Wall -Wno-main -Wno-address -Os -mcpu=cortex-a9 -DSMP=2
 LD_FLAGS = -nostartfiles -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I.
 C_FILES = board.c

@@ -173,17 +173,22 @@ void _irqVector()
 /****************************************************************************
  *
  ****************************************************************************/
-int main(void* stack, unsigned long size)
+int main(void* vectors, unsigned long vectorSize, void* stack,
+         unsigned long stackSize)
 {
    struct ip_addr gateway;
    struct ip_addr netmask;
    struct ip_addr ip;
+   int i;
 
    IP4_ADDR(&gateway, 10, 0, 2, 2);
    IP4_ADDR(&netmask, 255, 255, 255, 0);
    IP4_ADDR(&ip, 10, 0, 2, 15);
 
-   taskInit(&mainTask, "main", TASK_HIGH_PRIORITY, stack, size);
+   for (i = 0; i < (vectorSize / 4); i++)
+      ((unsigned long*) 0)[i] = ((unsigned long*) vectors)[i];
+
+   taskInit(&mainTask, "main", TASK_HIGH_PRIORITY, stack, stackSize);
 
    vicInit(&vic);
    sicInit(&sic);

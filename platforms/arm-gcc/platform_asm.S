@@ -178,17 +178,17 @@ fiqVector_msg:
 /****************************************************************************
  *
  ****************************************************************************/
-   .section .rodata
-   .p2align 2
+   .data
+   .p2align 12
 __vector_table:
    nop
-   ldr   pc, undefinedInstructionVector
-   ldr   pc, softwareInterruptVector
-   ldr   pc, prefetchAbortVector
-   ldr   pc, dataAbortVector
+   ldr pc, undefinedInstructionVector
+   ldr pc, softwareInterruptVector
+   ldr pc, prefetchAbortVector
+   ldr pc, dataAbortVector
    nop
-   ldr   pc, irqVector
-   ldr   pc, fiqVector
+   ldr pc, irqVector
+   ldr pc, fiqVector
 
 undefinedInstructionVector:
    .word _undefinedInstructionVector
@@ -226,12 +226,9 @@ _start:
    msr CPSR, #(CPU_I_BIT | CPU_MODE_SUPERVISOR)
    ldr sp, =__stack + TASK0_STACK_SIZE
 
-   ldr r0, =0
-   ldr r1, =__vector_table
-   ldr r2, =__vector_table_end__ - __vector_table
-   bl memcpy
-
-   ldr r0, =__stack
-   ldr r1, =TASK0_STACK_SIZE
+   ldr r0, =__vector_table
+   ldr r1, =__vector_table_end__ - __vector_table
+   ldr r2, =__stack
+   ldr r3, =TASK0_STACK_SIZE
    bl main
    bl taskExit

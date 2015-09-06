@@ -72,6 +72,7 @@ debug: $(BIN_FILE)
 #
 ##############################################################################
 C_FLAGS = -Wall -Wno-main -Wno-address -Os -mcpu=arm926ej-s
+#C_FLAGS = -g -Wall -Wno-main -Wno-address -mcpu=arm926ej-s
 LD_FLAGS = -nostartfiles -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I.
 BIN_FILES = fs_data.bin
