@@ -34,6 +34,7 @@ PROJECT = AliOS
 ##############################################################################
 #
 ##############################################################################
+#QEMU_ARGS = -M vexpress-a9 -m 128M -nographic -kernel $(BIN_FILE)
 QEMU_ARGS = -M vexpress-a9 -m 128M -nographic -smp 2 -kernel $(BIN_FILE)
 
 ##############################################################################
@@ -69,6 +70,7 @@ debug: $(BIN_FILE)
 ##############################################################################
 #
 ##############################################################################
+#C_FLAGS = -g -Wall -Wno-main -Wno-address -mcpu=cortex-a9 -DSMP=2
 C_FLAGS = -Wall -Wno-main -Wno-address -Os -mcpu=cortex-a9 -DSMP=2
 LD_FLAGS = -nostartfiles -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I.

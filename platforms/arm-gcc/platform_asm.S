@@ -160,7 +160,7 @@ __irqVector:
    msr CPSR, #(CPU_I_BIT | CPU_MODE_SUPERVISOR)
    pop {r0-r12,lr}
    msr CPSR, #(CPU_I_BIT | CPU_MODE_IRQ)
-   movs  pc, lr
+   movs pc, lr
 
 /****************************************************************************
  *
