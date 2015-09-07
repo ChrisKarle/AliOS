@@ -48,13 +48,11 @@ static CharDev* _dev = NULL;
  ****************************************************************************/
 ssize_t WEAK _write(int fd, const void* buffer, size_t count)
 {
-   CharDev* dev = _dev;
+   CharDev* dev = taskGetData(TASK_CONSOLE_ID);
    size_t i;
 
-#ifdef TASK_CONSOLE
-   if (taskCurrent()->user.TASK_CONSOLE != NULL)
-      dev = taskCurrent()->user.TASK_CONSOLE;
-#endif
+   if (dev == NULL)
+      dev = _dev;
 
    if (((fd != 1) && (fd != 2)) || (dev == NULL))
    {
@@ -80,13 +78,11 @@ ssize_t WEAK _write(int fd, const void* buffer, size_t count)
  ****************************************************************************/
 ssize_t WEAK _read(int fd, void* buffer, size_t count)
 {
-   CharDev* dev = _dev;
+   CharDev* dev = taskGetData(TASK_CONSOLE_ID);
    size_t i;
 
-#ifdef TASK_CONSOLE
-   if (taskCurrent()->user.TASK_CONSOLE != NULL)
-      dev = taskCurrent()->user.TASK_CONSOLE;
-#endif
+   if (dev == NULL)
+      dev = _dev;
 
    if ((fd != 0) || (dev == NULL))
    {
