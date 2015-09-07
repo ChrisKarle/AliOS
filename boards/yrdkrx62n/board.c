@@ -31,10 +31,12 @@
 #include "mutex_test.h"
 #include "platform.h"
 #include "queue_test.h"
-#include "rx62n_uart.h"
+#include "readline/readline.h"
+#include "readline/history.h"
 #include "semaphore_test.h"
-#include "shell.h"
+#include "shell/shell.h"
 #include "timer_test.h"
+#include "uart/rx62n_uart.h"
 
 /****************************************************************************
  *
@@ -66,13 +68,17 @@ static const ShellCmd SHELL_CMDS[] =
 /****************************************************************************
  *
  ****************************************************************************/
+static ReadlineData readlineData = READLINE_DATA(256);
+static HistoryData historyData = HISTORY_DATA(4);
+
 static UART uart2 = UART_CREATE
 (
    UART2,
    NULL,
    QUEUE_CREATE_PTR("uart2_rx", 1, 8)
 );
-static Task mainTask;
+
+static Task task;
 
 /****************************************************************************
  *
@@ -104,7 +110,7 @@ int main(void* stack, unsigned long size)
    /* XTAL: 12MHz -> ICLK: 96Mhz, PCLK: 48Mhz, BCLK: disabled */
    SCKCR = 0x00C30100;
 
-   taskInit(&mainTask, "main", TASK_HIGH_PRIORITY, stack, size);
+   taskInit(&task, "main", TASK_HIGH_PRIORITY, stack, size);
 
    PFFSCI |= 0x04;
    PORT5ICR |= 0x04;
@@ -126,6 +132,9 @@ int main(void* stack, unsigned long size)
    queueTest();
    semaphoreTest();
    timerTest();
+
+   taskSetData(READLINE_DATA_ID, &readlineData);
+   taskSetData(HISTORY_DATA_ID, &historyData);
 
    shellRun(SHELL_CMDS);
 
