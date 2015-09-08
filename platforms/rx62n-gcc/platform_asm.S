@@ -236,133 +236,133 @@ _irq:
    .weak _irq0,   _irq1,   _irq2,   _irq3,   \
          _irq4,   _irq5,   _irq6,   _irq7,   \
          _irq8,   _irq9,   _irq10,  _irq11,  \
-		 _irq12,  _irq13,  _irq14,  _irq15,  \
+         _irq12,  _irq13,  _irq14,  _irq15,  \
          _irq16,  _irq17,  _irq18,  _irq19,  \
-		 _irq20,  _irq21,  _irq22,  _irq23,  \
+         _irq20,  _irq21,  _irq22,  _irq23,  \
          _irq24,  _irq25,  _irq26,  _irq27,  \
-		 _irq28,  _irq29,  _irq30,  _irq31,  \
+         _irq28,  _irq29,  _irq30,  _irq31,  \
          _irq32,  _irq33,  _irq34,  _irq35,  \
-		 _irq36,  _irq37,  _irq38,  _irq39,  \
+         _irq36,  _irq37,  _irq38,  _irq39,  \
          _irq40,  _irq41,  _irq42,  _irq43,  \
-		 _irq44,  _irq45,  _irq46,  _irq47,  \
+         _irq44,  _irq45,  _irq46,  _irq47,  \
          _irq48,  _irq49,  _irq50,  _irq51,  \
-		 _irq52,  _irq53,  _irq54,  _irq55,  \
+         _irq52,  _irq53,  _irq54,  _irq55,  \
          _irq56,  _irq57,  _irq58,  _irq59,  \
-		 _irq60,  _irq61,  _irq62,  _irq63,  \
+         _irq60,  _irq61,  _irq62,  _irq63,  \
          _irq64,  _irq65,  _irq66,  _irq67,  \
-		 _irq68,  _irq69,  _irq70,  _irq71,  \
+         _irq68,  _irq69,  _irq70,  _irq71,  \
          _irq72,  _irq73,  _irq74,  _irq75,  \
-		 _irq76,  _irq77,  _irq78,  _irq79,  \
+         _irq76,  _irq77,  _irq78,  _irq79,  \
          _irq80,  _irq81,  _irq82,  _irq83,  \
-		 _irq84,  _irq85,  _irq86,  _irq87,  \
+         _irq84,  _irq85,  _irq86,  _irq87,  \
          _irq88,  _irq89,  _irq90,  _irq91,  \
-		 _irq92,  _irq93,  _irq94,  _irq95,  \
+         _irq92,  _irq93,  _irq94,  _irq95,  \
          _irq96,  _irq97,  _irq98,  _irq99,  \
-		 _irq100, _irq101, _irq102, _irq103, \
+         _irq100, _irq101, _irq102, _irq103, \
          _irq104, _irq105, _irq106, _irq107, \
-		 _irq108, _irq109, _irq110, _irq111, \
+         _irq108, _irq109, _irq110, _irq111, \
          _irq112, _irq113, _irq114, _irq115, \
-		 _irq116, _irq117, _irq118, _irq119, \
+         _irq116, _irq117, _irq118, _irq119, \
          _irq120, _irq121, _irq122, _irq123, \
-		 _irq124, _irq125, _irq126, _irq127, \
+         _irq124, _irq125, _irq126, _irq127, \
          _irq128, _irq129, _irq130, _irq131, \
-		 _irq132, _irq133, _irq134, _irq135, \
+         _irq132, _irq133, _irq134, _irq135, \
          _irq136, _irq137, _irq138, _irq139, \
-		 _irq140, _irq141, _irq142, _irq143, \
+         _irq140, _irq141, _irq142, _irq143, \
          _irq144, _irq145, _irq146, _irq147, \
-		 _irq148, _irq149, _irq150, _irq151, \
+         _irq148, _irq149, _irq150, _irq151, \
          _irq152, _irq153, _irq154, _irq155, \
-		 _irq156, _irq157, _irq158, _irq159, \
+         _irq156, _irq157, _irq158, _irq159, \
          _irq160, _irq161, _irq162, _irq163, \
-		 _irq164, _irq165, _irq166, _irq167, \
+         _irq164, _irq165, _irq166, _irq167, \
          _irq168, _irq169, _irq170, _irq171, \
-		 _irq172, _irq173, _irq174, _irq175, \
+         _irq172, _irq173, _irq174, _irq175, \
          _irq176, _irq177, _irq178, _irq179, \
-		 _irq180, _irq181, _irq182, _irq183, \
+         _irq180, _irq181, _irq182, _irq183, \
          _irq184, _irq185, _irq186, _irq187, \
-		 _irq188, _irq189, _irq190, _irq191, \
+         _irq188, _irq189, _irq190, _irq191, \
          _irq192, _irq193, _irq194, _irq195, \
-		 _irq196, _irq197, _irq198, _irq199, \
+         _irq196, _irq197, _irq198, _irq199, \
          _irq200, _irq201, _irq202, _irq203, \
-		 _irq204, _irq205, _irq206, _irq207, \
+         _irq204, _irq205, _irq206, _irq207, \
          _irq208, _irq209, _irq210, _irq211, \
-		 _irq212, _irq213, _irq214, _irq215, \
+         _irq212, _irq213, _irq214, _irq215, \
          _irq216, _irq217, _irq218, _irq219, \
-		 _irq220, _irq221, _irq222, _irq223, \
+         _irq220, _irq221, _irq222, _irq223, \
          _irq224, _irq225, _irq226, _irq227, \
-		 _irq228, _irq229, _irq230, _irq231, \
+         _irq228, _irq229, _irq230, _irq231, \
          _irq232, _irq233, _irq234, _irq235, \
-		 _irq236, _irq237, _irq238, _irq239, \
+         _irq236, _irq237, _irq238, _irq239, \
          _irq240, _irq241, _irq242, _irq243, \
-		 _irq244, _irq245, _irq246, _irq247, \
+         _irq244, _irq245, _irq246, _irq247, \
          _irq248, _irq249, _irq250, _irq251, \
-		 _irq252, _irq253, _irq254, _irq255
+         _irq252, _irq253, _irq254, _irq255
    .p2align 2
 vectors:
    .long _irq0,   _irq1,   _irq2,   _irq3,   \
          _irq4,   _irq5,   _irq6,   _irq7,   \
          _irq8,   _irq9,   _irq10,  _irq11,  \
-		 _irq12,  _irq13,  _irq14,  _irq15,  \
+         _irq12,  _irq13,  _irq14,  _irq15,  \
          _irq16,  _irq17,  _irq18,  _irq19,  \
-		 _irq20,  _irq21,  _irq22,  _irq23,  \
+         _irq20,  _irq21,  _irq22,  _irq23,  \
          _irq24,  _irq25,  _irq26,  _irq27,  \
-		 _irq28,  _irq29,  _irq30,  _irq31,  \
+         _irq28,  _irq29,  _irq30,  _irq31,  \
          _irq32,  _irq33,  _irq34,  _irq35,  \
-		 _irq36,  _irq37,  _irq38,  _irq39,  \
+         _irq36,  _irq37,  _irq38,  _irq39,  \
          _irq40,  _irq41,  _irq42,  _irq43,  \
-		 _irq44,  _irq45,  _irq46,  _irq47,  \
+         _irq44,  _irq45,  _irq46,  _irq47,  \
          _irq48,  _irq49,  _irq50,  _irq51,  \
-		 _irq52,  _irq53,  _irq54,  _irq55,  \
+         _irq52,  _irq53,  _irq54,  _irq55,  \
          _irq56,  _irq57,  _irq58,  _irq59,  \
-		 _irq60,  _irq61,  _irq62,  _irq63,  \
+         _irq60,  _irq61,  _irq62,  _irq63,  \
          _irq64,  _irq65,  _irq66,  _irq67,  \
-		 _irq68,  _irq69,  _irq70,  _irq71,  \
+         _irq68,  _irq69,  _irq70,  _irq71,  \
          _irq72,  _irq73,  _irq74,  _irq75,  \
-		 _irq76,  _irq77,  _irq78,  _irq79,  \
+         _irq76,  _irq77,  _irq78,  _irq79,  \
          _irq80,  _irq81,  _irq82,  _irq83,  \
-		 _irq84,  _irq85,  _irq86,  _irq87,  \
+         _irq84,  _irq85,  _irq86,  _irq87,  \
          _irq88,  _irq89,  _irq90,  _irq91,  \
-		 _irq92,  _irq93,  _irq94,  _irq95,  \
+         _irq92,  _irq93,  _irq94,  _irq95,  \
          _irq96,  _irq97,  _irq98,  _irq99,  \
-		 _irq100, _irq101, _irq102, _irq103, \
+         _irq100, _irq101, _irq102, _irq103, \
          _irq104, _irq105, _irq106, _irq107, \
-		 _irq108, _irq109, _irq110, _irq111, \
+         _irq108, _irq109, _irq110, _irq111, \
          _irq112, _irq113, _irq114, _irq115, \
-		 _irq116, _irq117, _irq118, _irq119, \
+         _irq116, _irq117, _irq118, _irq119, \
          _irq120, _irq121, _irq122, _irq123, \
-		 _irq124, _irq125, _irq126, _irq127, \
+         _irq124, _irq125, _irq126, _irq127, \
          _irq128, _irq129, _irq130, _irq131, \
-		 _irq132, _irq133, _irq134, _irq135, \
+         _irq132, _irq133, _irq134, _irq135, \
          _irq136, _irq137, _irq138, _irq139, \
-		 _irq140, _irq141, _irq142, _irq143, \
+         _irq140, _irq141, _irq142, _irq143, \
          _irq144, _irq145, _irq146, _irq147, \
-		 _irq148, _irq149, _irq150, _irq151, \
+         _irq148, _irq149, _irq150, _irq151, \
          _irq152, _irq153, _irq154, _irq155, \
-		 _irq156, _irq157, _irq158, _irq159, \
+         _irq156, _irq157, _irq158, _irq159, \
          _irq160, _irq161, _irq162, _irq163, \
-		 _irq164, _irq165, _irq166, _irq167, \
+         _irq164, _irq165, _irq166, _irq167, \
          _irq168, _irq169, _irq170, _irq171, \
-		 _irq172, _irq173, _irq174, _irq175, \
+         _irq172, _irq173, _irq174, _irq175, \
          _irq176, _irq177, _irq178, _irq179, \
-		 _irq180, _irq181, _irq182, _irq183, \
+         _irq180, _irq181, _irq182, _irq183, \
          _irq184, _irq185, _irq186, _irq187, \
-		 _irq188, _irq189, _irq190, _irq191, \
+         _irq188, _irq189, _irq190, _irq191, \
          _irq192, _irq193, _irq194, _irq195, \
-		 _irq196, _irq197, _irq198, _irq199, \
+         _irq196, _irq197, _irq198, _irq199, \
          _irq200, _irq201, _irq202, _irq203, \
-		 _irq204, _irq205, _irq206, _irq207, \
+         _irq204, _irq205, _irq206, _irq207, \
          _irq208, _irq209, _irq210, _irq211, \
-		 _irq212, _irq213, _irq214, _irq215, \
+         _irq212, _irq213, _irq214, _irq215, \
          _irq216, _irq217, _irq218, _irq219, \
-		 _irq220, _irq221, _irq222, _irq223, \
+         _irq220, _irq221, _irq222, _irq223, \
          _irq224, _irq225, _irq226, _irq227, \
-		 _irq228, _irq229, _irq230, _irq231, \
+         _irq228, _irq229, _irq230, _irq231, \
          _irq232, _irq233, _irq234, _irq235, \
-		 _irq236, _irq237, _irq238, _irq239, \
+         _irq236, _irq237, _irq238, _irq239, \
          _irq240, _irq241, _irq242, _irq243, \
-		 _irq244, _irq245, _irq246, _irq247, \
+         _irq244, _irq245, _irq246, _irq247, \
          _irq248, _irq249, _irq250, _irq251, \
-		 _irq252, _irq253, _irq254, _irq255
+         _irq252, _irq253, _irq254, _irq255
 
 /****************************************************************************
  *

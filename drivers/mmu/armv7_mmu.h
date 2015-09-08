@@ -58,7 +58,7 @@
  ****************************************************************************/
 typedef struct
 {
-	unsigned long ALIGNED(16384) l1[4096];
+   unsigned long ALIGNED(16384) l1[4096];
 
 } MMU;
 
