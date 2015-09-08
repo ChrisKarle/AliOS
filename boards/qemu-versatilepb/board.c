@@ -37,6 +37,7 @@
 #include "libc_glue.h"
 #include "lwip/tcpip.h"
 #include "misc/mem_dev.h"
+#include "mmu/armv7_mmu.h"
 #include "net/lan91c.h"
 #include "readline/history.h"
 #include "shell/shell.h"
@@ -71,9 +72,11 @@ static LAN91C lan91c = LAN91C_CREATE
 static SP804 sp804 = SP804_CREATE(0x101E2000);
 static VIC vic = VIC_CREATE(0x10140000);
 static SIC sic = SIC_CREATE(0x10003000);
+static unsigned long ALIGNED(4096) mmuPage[1024];
 static HistoryData historyData = HISTORY_DATA(10);
 static Task httpTask = TASK_CREATE("httpd", 2048);
 static Task mainTask;
+static MMU mmu;
 static MemDev memDev;
 static VFS vfs;
 static HTTPServer httpServer;
@@ -134,6 +137,19 @@ static void taskTick(HWTimer* timer)
 /****************************************************************************
  *
  ****************************************************************************/
+void* mmuGetPage(unsigned int count)
+{
+   return mmuPage;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void mmuFreePage(void* page) {}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 void taskTimer(unsigned long ticks)
 {
    unsigned long tickClks = sp804.timer.clk / TASK_TICK_HZ;
@@ -179,14 +195,15 @@ int main(void* vectors, unsigned long vectorSize, void* stack,
    struct ip_addr gateway;
    struct ip_addr netmask;
    struct ip_addr ip;
-   int i;
 
    IP4_ADDR(&gateway, 10, 0, 2, 2);
    IP4_ADDR(&netmask, 255, 255, 255, 0);
    IP4_ADDR(&ip, 10, 0, 2, 15);
 
-   for (i = 0; i < (vectorSize / 4); i++)
-      ((unsigned long*) 0)[i] = ((unsigned long*) vectors)[i];
+   mmuInit(&mmu);
+   mmuMap(&mmu, MMU_MODE_KR | MMU_MODE_X | MMU_MODE_C | MMU_MODE_B,
+          (void*) 0xFFFF0000, vectors, 1);
+   vectorsHigh();
 
    taskInit(&mainTask, "main", TASK_HIGH_PRIORITY, stack, stackSize);
 

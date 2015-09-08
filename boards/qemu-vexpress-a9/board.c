@@ -29,6 +29,7 @@
 #include "gic.h"
 #include "kernel.h"
 #include "libc_glue.h"
+#include "mmu/armv7_mmu.h"
 #include "mutex_test.h"
 #include "queue_test.h"
 #include "readline/history.h"
@@ -62,8 +63,7 @@ static const ShellCmd SHELL_CMDS[] =
 /****************************************************************************
  *
  ****************************************************************************/
-static unsigned long ALIGNED(16384) l1Table[4096];
-static unsigned long ALIGNED(4096) l2Table[1024];
+static unsigned long ALIGNED(4096) mmuPage[1024];
 
 static PL011 pl011 = PL011_CREATE
 (
@@ -76,6 +76,7 @@ static SP804 sp804 = SP804_CREATE(0x10011000);
 static GIC gic = GIC_CREATE(0x1E000100, 0x1E001000);
 static HistoryData historyData = HISTORY_DATA(10);
 static Task task[SMP];
+static MMU mmu;
 
 /****************************************************************************
  *
@@ -105,6 +106,19 @@ static void smpInit()
    *jmpPtr = _smpInit;
    smpWake(-1);
 }
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void* mmuGetPage(unsigned int count)
+{
+   return mmuPage;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void mmuFreePage(void* page) {}
 
 /****************************************************************************
  *
@@ -151,19 +165,9 @@ void _irqVector()
  ****************************************************************************/
 void smpMain(void* stack, unsigned long size)
 {
-   __asm__ __volatile__
-   (
-      "mcr p15, 0, %0, c3, c0, 0  \n"
-      "mcr p15, 0, %1, c2, c0, 0  \n"
-      "mov r12, #0                \n"
-      "mcr p15, 0, r12, c7, c7, 0 \n"
-      "mcr p15, 0, r12, c8, c7, 0 \n"
-      "mrc p15, 0, r12, c1, c0, 0 \n"
-      "orr r12, #0x00001000       \n"
-      "orr r12, #0x00000005       \n"
-      "mcr p15, 0, r12, c1, c0, 0 \n"
-      : : "r" (0xFFFFFFFF), "r" (l1Table) : "r12", "memory"
-   );
+   mmuSet(&mmu);
+   mmuEnable(true);
+   vectorsHigh();
 
    gicInitSMP(&gic);
    taskInit(&task[cpuID()], "main+", TASK_LOW_PRIORITY, stack, size);
@@ -179,38 +183,10 @@ void smpMain(void* stack, unsigned long size)
 int main(void* vectors, unsigned long vectorSize, void* stack,
          unsigned long stackSize)
 {
-   unsigned long i;
-
-   l1Table[0] = (unsigned long) l2Table | 0x00000011;
-
-   for (i = 1; i < 4096; i++)
-   {
-      unsigned long addr = i << 20;
-
-      l1Table[i] = addr | 0x00000C12;
-
-      if ((addr >= 0x60000000) && (addr < (0x60000000 + BOARD_MEM_SIZE)))
-         l1Table[i] |= 0x0000000C;
-   }
-
-   l2Table[0] = (unsigned long) vectors | 0x0000000E;
-
-   for (i = 1; i < 256; i++)
-      l2Table[i] = (i << 12) | 0x00000002;
-
-   __asm__ __volatile__
-   (
-      "mcr p15, 0, %0, c3, c0, 0  \n"
-      "mcr p15, 0, %1, c2, c0, 0  \n"
-      "mov r12, #0                \n"
-      "mcr p15, 0, r12, c7, c7, 0 \n"
-      "mcr p15, 0, r12, c8, c7, 0 \n"
-      "mrc p15, 0, r12, c1, c0, 0 \n"
-      "orr r12, #0x00001000       \n"
-      "orr r12, #0x00000005       \n"
-      "mcr p15, 0, r12, c1, c0, 0 \n"
-      : : "r" (0xFFFFFFFF), "r" (l1Table) : "r12", "memory"
-   );
+   mmuInit(&mmu);
+   mmuMap(&mmu, MMU_MODE_KR | MMU_MODE_X | MMU_MODE_C | MMU_MODE_B,
+          (void*) 0xFFFF0000, vectors, 1);
+   vectorsHigh();
 
    taskInit(&task[cpuID()], "main", TASK_HIGH_PRIORITY, stack, stackSize);
 

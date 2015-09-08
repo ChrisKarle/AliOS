@@ -71,8 +71,8 @@ debug: $(BIN_FILE)
 ##############################################################################
 #
 ##############################################################################
-C_FLAGS = -Wall -Wno-main -Wno-address -Os -mcpu=arm926ej-s
 #C_FLAGS = -g -Wall -Wno-main -Wno-address -mcpu=arm926ej-s
+C_FLAGS = -Wall -Wno-main -Wno-address -Os -mcpu=arm926ej-s
 LD_FLAGS = -nostartfiles -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I.
 BIN_FILES = fs_data.bin
@@ -99,11 +99,12 @@ C_FILES += kernel.c
 ##############################################################################
 VPATH += ../../drivers/fs
 VPATH += ../../drivers/misc
+VPATH += ../../drivers/mmu
 VPATH += ../../drivers/net
 VPATH += ../../drivers/timer
 VPATH += ../../drivers/uart
 INCLUDES += -I../../drivers
-C_FILES += pl011.c sp804.c mem_dev.c vfs.c romfs.c lan91c.c
+C_FILES += pl011.c sp804.c mem_dev.c vfs.c romfs.c lan91c.c armv7_mmu.c
 
 ##############################################################################
 #
