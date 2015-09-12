@@ -69,10 +69,7 @@ C_FILES = board.c
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../platforms/avr-gcc
-INCLUDES += -I../../platforms/avr-gcc
-C_FILES += platform.c libc_glue.c
-S_FILES = platform_asm.S
+include ../../platforms/avr-gcc/Makefile.inc
 
 ##############################################################################
 #
@@ -84,23 +81,21 @@ C_FILES += avr_uart0.c
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../kernel
-INCLUDES += -I../../kernel
-C_FILES += kernel.c
+include ../../kernel/Makefile.inc
 
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../extras/shell ../../extras/readline
-INCLUDES += -I../../extras
-C_FILES += shell.c readline.c
+include ../../extras/Makefile.inc
+#include ../../extras/locale/Makefile.inc
+#include ../../extras/lua/Makefile.inc
+include ../../extras/readline/Makefile.inc
+include ../../extras/shell/Makefile.inc
 
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../tests
-INCLUDES += -I../../tests
-C_FILES += timer_test.c queue_test.c semaphore_test.c mutex_test.c
+include ../../tests/Makefile.inc
 
 ##############################################################################
 #
