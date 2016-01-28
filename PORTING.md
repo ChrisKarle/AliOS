@@ -7,29 +7,27 @@ architecture.
 ```c
 void _kernelLock()
 ```
-This function is called to lock the kernel from within an interrupt context.
+This function is called to lock the kernel within an interrupt context.  This
+function is never called recursively.
 
 ---
 ```c
 void _kernelUnlock()
 ```
-This function is called to unlock the kernel from within an interrupt context.
-This function must be able to unlock a kernelLock().
+This function is called to unlock the kernel within an interrupt context.
 
 ---
 ```c
 void kernelLock()
 ```
-This function is called to lock the kernel. This function must be able to be
-called from within an interrupt context.
+This function is called to lock the kernel outside an interrupt context. This
+function is never called recursively.
 
 ---
 ```c
 void kernelUnlock()
 ```
-This function is called to unlock the kernel. This function must be able to...
-   - unlock a _kernelLock().
-   - be called from within an interrupt context.
+This function is called to unlock the kernel outside an interrupt context.
 
 ---
 ```c
@@ -54,7 +52,7 @@ void _taskEntry(Task* task)
 ```
 This function is called by the kernel before a task is run for the first time.
 Technically, the task is running but the kernel is just about call the task's
-fx(arg) function.  Depending on the architecture, the kernel will start a
+fx(arg) function.  Depending on the architecture, the kernel may start a
 task with the kernel locked, and this callback can be used to unlock the
 kernel before the task is officially run.
 
@@ -110,15 +108,6 @@ This function must be called by the port implementation.  Calling this
 function advances the kernel's time keeping logic and is required for
 timeouts and kernel timers to function.  The "ticks" argument is the number
 of system timer/ticks that have elapsed.  See taskTimer().
-
----
-```c
-void taskPreempt(bool flag)
-```
-This function is not called by the kernel, but many drivers call this function
-as part of their interrupt service routines.  If TASK_PREEMPTION is disabled,
-this function can just be an empty macro.  If no additional functionality is
-required by the port, this function can just be a macro for _taskPreempt().
 
 ---
 ```c

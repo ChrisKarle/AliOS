@@ -58,7 +58,7 @@
 /****************************************************************************
  *
  ****************************************************************************/
-static void _timerAdd(int list, Timer* timer, unsigned long ticks);
+static void __timerAdd(int list, Timer* timer, unsigned long ticks);
 #endif
 
 /****************************************************************************
@@ -415,6 +415,9 @@ static void taskTimeout(unsigned char state, unsigned long ticks)
 
       if (task != NULL)
       {
+#ifdef _taskYield
+         _taskYield(task);
+#endif
          taskSwitch(task, TASK_STATE_RUN);
       }
       else if (ticks > 0)
@@ -542,9 +545,9 @@ bool _taskStart(Task* task, void (*fx)(void*), void* arg,
 {
    bool success;
 
-   kernelLock();
+   _kernelLock();
    success = __taskStart(task, fx, arg, priority);
-   kernelUnlock();
+   _kernelUnlock();
 
    return success;
 }
@@ -574,22 +577,24 @@ bool taskStart(Task* task, void (*fx)(void*), void* arg,
    return success;
 }
 
+#if TASK_PREEMPTION
 /****************************************************************************
  *
  ****************************************************************************/
-void _taskPreempt(bool flag)
+void _taskPreempt(bool yield)
 {
    Task* task = NULL;
 
    _kernelLock();
 
-   task = taskNext(flag ? current->priority + 1 : current->priority);
+   task = taskNext(yield ? current->priority + 1 : current->priority);
 
    if (task != NULL)
       taskSwitch(task, TASK_STATE_RUN);
 
    _kernelUnlock();
 }
+#endif
 
 /****************************************************************************
  *
@@ -604,7 +609,7 @@ void taskSleep(unsigned long ticks)
 /****************************************************************************
  *
  ****************************************************************************/
-static void _taskPriority(Task* task, unsigned char priority)
+static void __taskPriority(Task* task, unsigned char priority)
 {
    if (task == NULL)
       task = current;
@@ -678,11 +683,21 @@ static void _taskPriority(Task* task, unsigned char priority)
 /****************************************************************************
  *
  ****************************************************************************/
+void _taskPriority(Task* task, unsigned char priority)
+{
+   _kernelLock();
+   __taskPriority(task, priority);
+   _kernelUnlock();
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 void taskPriority(Task* task, unsigned char priority)
 {
    kernelLock();
 
-   _taskPriority(task, priority);
+   __taskPriority(task, priority);
 
    task = taskNext(current->priority);
 
@@ -1088,10 +1103,11 @@ void _taskTick(unsigned long _ticks)
 
       aTicks += timer->ticks[0];
 
-      if (__taskStart(timer->task, timer->fx, timer, timer->priority))
+      if (__taskStart(timer->task, (void (*)(void*)) timer->fx, timer,
+                      timer->priority))
       {
          if (timer->flags & TIMER_FLAG_PERIODIC)
-            _timerAdd(0, timer, aTicks);
+            __timerAdd(0, timer, aTicks);
 
          if (timer != timers[1])
             previous->next = next;
@@ -1137,17 +1153,18 @@ void _taskTick(unsigned long _ticks)
          {
             timer->task->name = timer->name;
 
-            if (__taskStart(timer->task, timer->fx, timer, timer->priority))
+            if (__taskStart(timer->task, (void (*)(void*)) timer->fx, timer,
+                            timer->priority))
             {
                if (timer->flags & TIMER_FLAG_PERIODIC)
-                  _timerAdd(0, timer, timer->ticks[1]);
+                  __timerAdd(0, timer, timer->ticks[1]);
             }
             else
             {
                if (timer->flags & TIMER_FLAG_PERIODIC)
-                  _timerAdd(1, timer, timer->ticks[1]);
+                  __timerAdd(1, timer, timer->ticks[1]);
                else
-                  _timerAdd(1, timer, 0);
+                  __timerAdd(1, timer, 0);
             }
          }
 
@@ -1240,7 +1257,7 @@ void timerDestroy(Timer* timer)
 /****************************************************************************
  *
  ****************************************************************************/
-static void _timerAdd(int list, Timer* _timer, unsigned long ticks)
+static void __timerAdd(int list, Timer* _timer, unsigned long ticks)
 {
    Timer* previous = NULL;
    Timer* timer = timers[list];
@@ -1276,35 +1293,11 @@ static void _timerAdd(int list, Timer* _timer, unsigned long ticks)
 /****************************************************************************
  *
  ****************************************************************************/
-void timerAdd(Timer* timer, Task* task, void (*fx)(void*), void* ptr,
-              unsigned char priority, unsigned long ticks)
+static void __timerCancel(Timer* _timer)
 {
-   kernelLock();
-
-   timer->task = task;
-   timer->fx = fx;
-   timer->ptr = ptr;
-   timer->ticks[1] = ticks;
-   timer->priority = priority;
-
-   _timerAdd(0, timer, ticks);
-   taskSetTimer(false);
-
-   kernelUnlock();
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-void timerCancel(Timer* _timer)
-{
+   Timer* timer = timers[0];
    Timer* previous = NULL;
-   Timer* timer = NULL;
    bool found = false;
-
-   kernelLock();
-
-   timer = timers[0];
 
    while (!found && (timer != NULL))
    {
@@ -1346,7 +1339,65 @@ void timerCancel(Timer* _timer)
       previous = timer;
       timer = timer->next;
    }
+}
 
+/****************************************************************************
+ *
+ ****************************************************************************/
+void _timerAdd(Timer* timer, Task* task, void (*fx)(Timer*), void* ptr,
+               unsigned char priority, unsigned long ticks)
+{
+   _kernelLock();
+
+   timer->task = task;
+   timer->fx = fx;
+   timer->ptr = ptr;
+   timer->ticks[1] = ticks;
+   timer->priority = priority;
+
+   __timerAdd(0, timer, ticks);
+   taskSetTimer(false);
+
+   _kernelUnlock();
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void timerAdd(Timer* timer, Task* task, void (*fx)(Timer*), void* ptr,
+              unsigned char priority, unsigned long ticks)
+{
+   kernelLock();
+
+   timer->task = task;
+   timer->fx = fx;
+   timer->ptr = ptr;
+   timer->ticks[1] = ticks;
+   timer->priority = priority;
+
+   __timerAdd(0, timer, ticks);
+   taskSetTimer(false);
+
+   kernelUnlock();
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void _timerCancel(Timer* timer)
+{
+   _kernelLock();
+   __timerCancel(timer);
+   _kernelUnlock();
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void timerCancel(Timer* timer)
+{
+   kernelLock();
+   __timerCancel(timer);
    kernelUnlock();
 }
 #endif
@@ -1540,9 +1591,9 @@ bool _queuePush(Queue* queue, bool tail, const void* src)
 {
    bool success;
 
-   kernelLock();
+   _kernelLock();
    success = __queuePush(queue, tail, src);
-   kernelUnlock();
+   _kernelUnlock();
 
    return success;
 }
@@ -1593,9 +1644,9 @@ bool _queuePop(Queue* queue, bool head, bool peek, void* dst)
 {
    bool success;
 
-   kernelLock();
+   _kernelLock();
    success = __queuePop(queue, head, peek, dst);
-   kernelUnlock();
+   _kernelUnlock();
 
    return success;
 }
@@ -1734,9 +1785,9 @@ bool _semaphoreGive(Semaphore* semaphore)
 {
    bool success;
 
-   kernelLock();
+   _kernelLock();
    success = __semaphoreGive(semaphore);
-   kernelUnlock();
+   _kernelUnlock();
 
    return success;
 }

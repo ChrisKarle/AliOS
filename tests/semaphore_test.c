@@ -48,12 +48,12 @@ static unsigned long x[3] = {0, 0, 0};
 /****************************************************************************
  *
  ****************************************************************************/
-static void fxTimer(void* arg)
+static void fxTimer(Timer* _timer)
 {
    if (_semaphoreGive(&semaphore1))
       x[0]++;
 
-   timerAdd(&timer, NULL, fxTimer, NULL, 0, rand() % 100);
+   timerAdd(_timer, NULL, fxTimer, NULL, 0, rand() % 100);
 }
 
 /****************************************************************************

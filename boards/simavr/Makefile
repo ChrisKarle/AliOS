@@ -87,8 +87,6 @@ include ../../kernel/Makefile.inc
 #
 ##############################################################################
 include ../../extras/Makefile.inc
-#include ../../extras/locale/Makefile.inc
-#include ../../extras/lua/Makefile.inc
 include ../../extras/readline/Makefile.inc
 include ../../extras/shell/Makefile.inc
 

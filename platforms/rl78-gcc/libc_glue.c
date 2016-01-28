@@ -27,9 +27,8 @@
  ****************************************************************************/
 #include <errno.h>
 #include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
-//#include "kernel.h"
+#include "kernel.h"
 #include "libc_glue.h"
 #include "platform.h"
 
@@ -48,8 +47,7 @@ static CharDev* _dev = NULL;
  ****************************************************************************/
 ssize_t WEAK _write(int fd, const void* buffer, size_t count)
 {
-   //CharDev* dev = taskGetData(TASK_CONSOLE_ID);
-   CharDev* dev = NULL;
+   CharDev* dev = taskGetData(TASK_CONSOLE_ID);
    size_t i;
 
    if (dev == NULL)
@@ -63,7 +61,7 @@ ssize_t WEAK _write(int fd, const void* buffer, size_t count)
 
    for (i = 0; i < count; i++)
    {
-      int c = ((const uint8_t*) buffer)[i];
+      int c = ((const unsigned char*) buffer)[i];
 
       if (c == '\n')
          dev->tx(dev, '\r');
@@ -79,8 +77,7 @@ ssize_t WEAK _write(int fd, const void* buffer, size_t count)
  ****************************************************************************/
 ssize_t WEAK _read(int fd, void* buffer, size_t count)
 {
-   //CharDev* dev = taskGetData(TASK_CONSOLE_ID);
-   CharDev* dev = NULL;
+   CharDev* dev = taskGetData(TASK_CONSOLE_ID);
    size_t i;
 
    if (dev == NULL)
@@ -102,7 +99,7 @@ ssize_t WEAK _read(int fd, void* buffer, size_t count)
       if (c == '\r')
          c = '\n';
 
-      ((uint8_t*) buffer)[i] = (uint8_t) c;
+      ((unsigned char*) buffer)[i] = (unsigned char) c;
    }
 
    return (ssize_t) i;

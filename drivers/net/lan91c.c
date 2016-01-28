@@ -154,7 +154,7 @@ static err_t lan91cTx(struct netif* netif, struct pbuf* pbuf)
       if (B2_ARR(lan91c) & 0x80)
       {
          B2_MSK(lan91c) |= 0x01;
-         mutexUnlock(lan91c->lock);
+         mutexUnlock(lan91c->lock, true);
          taskSleep(1);
          mutexLock(lan91c->lock, -1);
          B2_MSK(lan91c) &= ~0x01;
@@ -207,7 +207,7 @@ static err_t lan91cTx(struct netif* netif, struct pbuf* pbuf)
    B2_MMUCR(lan91c) = 6 << 5;
    B2_MSK(lan91c) |= 0x01;
 
-   mutexUnlock(lan91c->lock);
+   mutexUnlock(lan91c->lock, true);
 
    return ERR_OK;
 }
@@ -227,7 +227,7 @@ static void lan91cRx(void* arg)
       uintptr_t payload;
       uint16_t i;
 
-      queuePop(lan91c->rxQueue, true, false, &pkt, -1);
+      queuePop(lan91c->rxQueue, true, false, &pkt, -1, true);
 
       mutexLock(lan91c->lock, -1);
 
@@ -265,7 +265,7 @@ static void lan91cRx(void* arg)
       while (B2_MMUCR(lan91c) & 0x0001);
       B2_MSK(lan91c) |= 0x01;
 
-      mutexUnlock(lan91c->lock);
+      mutexUnlock(lan91c->lock, true);
 
       if (lan91c->netif.input(pbuf, &lan91c->netif) != ERR_OK)
          pbuf_free(pbuf);
@@ -297,7 +297,7 @@ static err_t _lan91cInit(struct netif* netif)
    netif->flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP |
                   NETIF_FLAG_LINK_UP | NETIF_FLAG_UP;
 
-   taskStart(lan91c->rxTask, lan91cRx, lan91c, lan91c->priority);
+   taskStart(lan91c->rxTask, lan91cRx, lan91c, lan91c->priority, true);
 
    return ERR_OK;
 }
@@ -317,7 +317,7 @@ void lan91cIRQ(unsigned int n, void* _lan91c)
       uint8_t pkt = B2_RXFIFO(lan91c) & ~0x80;
       _queuePush(lan91c->rxQueue, true, &pkt);
       B2_MMUCR(lan91c) = 3 << 5;
-      taskPreempt(false);
+      _taskPreempt(false);
    }
 }
 

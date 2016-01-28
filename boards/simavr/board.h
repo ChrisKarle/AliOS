@@ -46,10 +46,11 @@
 /****************************************************************************
  * Note: Task preemption is rarely needed.
  ****************************************************************************/
-#define TASK_PREEMPTION  0
-#define TASK_LIST        1
-#define TASK_STACK_USAGE 1
-#define TASK0_STACK_SIZE 512
+#define TASK_PREEMPTION   0
+#define TASK_LIST         1
+#define TASK_STACK_USAGE  1
+#define TASK_NUM_TASKDATA 2
+#define TASK0_STACK_SIZE  512
 
 /****************************************************************************
  *
@@ -57,20 +58,6 @@
 #define TASK_HIGH_PRIORITY  0
 #define TASK_LOW_PRIORITY   1
 #define TASK_NUM_PRIORITIES 2
-
-/****************************************************************************
- *
- ****************************************************************************/
-#define TASK_NUM_TASKDATA 2
-
-/****************************************************************************
- *
- ****************************************************************************/
-#if TASK_PREEMPTION
-#define taskPreempt(f) _taskPreempt(f)
-#else
-#define taskPreempt(f)
-#endif
 
 /****************************************************************************
  *

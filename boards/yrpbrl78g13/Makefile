@@ -63,7 +63,7 @@ debug: $(ELF_FILE)
 ##############################################################################
 #
 ##############################################################################
-C_FLAGS = -Wall -Os -nostdinc -mcpu=g13 -mmul=g13
+C_FLAGS = -Wall -Wno-main -Os -nostdinc -mcpu=g13 -mmul=g13
 LD_FLAGS = -nostdlib -Wl,-loptc,-lgcc -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I$(TOOLCHAIN_PATH)/rl78-elf/optlibinc -I.
 C_FILES = board.c
@@ -72,17 +72,12 @@ S_FILES =
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../platforms/rl78-gcc
-INCLUDES += -I../../platforms/rl78-gcc
-C_FILES += platform.c libc_glue.c
-S_FILES += platform_asm.S
+include ../../platforms/rl78-gcc/Makefile.inc
 
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../kernel
-INCLUDES += -I../../kernel
-C_FILES += kernel.c
+include ../../kernel/Makefile.inc
 
 ##############################################################################
 #
@@ -94,27 +89,12 @@ C_FILES += rl78_uart.c
 ##############################################################################
 #
 ##############################################################################
-#VPATH += ../../extras/readline
-#VPATH += ../../extras/shell
-#INCLUDES += -I../../extras
-#C_FILES += readline.c shell.c
-
-##############################################################################
-#
-##############################################################################
-#VPATH += ../../tests
-#INCLUDES += -I../../tests
-#C_FILES += timer_test.c queue_test.c semaphore_test.c mutex_test.c
-
-##############################################################################
-#
-##############################################################################
 OBJ_FILES += $(C_FILES:%.c=%.o)
 OBJ_FILES += $(S_FILES:%.S=%.o)
 DEP_FILES = $(C_FILES:%.c=%.d)
 DEP_FILES += $(S_FILES:%.S=%.d)
 
-$(ELF_FILE): $(OBJ_FILES)
+$(ELF_FILE): $(OBJ_FILES) $(LD_FILE)
 	$(CROSS_COMPILE)gcc -o $@ $(OBJ_FILES) $(LD_FLAGS)
 	$(CROSS_COMPILE)objcopy -O ihex $(ELF_FILE) $(HEX_FILE)
 

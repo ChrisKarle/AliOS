@@ -67,14 +67,12 @@ SECTIONS
       __text__ = .;
       *(.text)
       *(.plt)
-      //*(PFDL_COD)
       __text_end__ = .;
 
    } >rom :text
 
-   .rodata :
+   .rodata MAX(0x2000, .) :
    {
-      //. = MAX(., 0x2000);
       __rodata__ = .;
       *(.rodata)
       __rodata_end__ = .;

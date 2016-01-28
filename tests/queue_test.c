@@ -47,7 +47,7 @@ static uint8_t x2[2] = {0, 0};
 /****************************************************************************
  *
  ****************************************************************************/
-static void fxTimer(void* arg)
+static void fxTimer(Timer* _timer)
 {
    bool peek = (rand() % 10) == 0;
    uint8_t x = 0;
@@ -68,7 +68,7 @@ static void fxTimer(void* arg)
       }
    }
 
-   timerAdd(&timer, NULL, fxTimer, NULL, 0, rand() % 100);
+   timerAdd(_timer, NULL, fxTimer, NULL, 0, rand() % 100);
 }
 
 /****************************************************************************

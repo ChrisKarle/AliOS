@@ -50,6 +50,15 @@ static CharDev* _dev = NULL;
 /****************************************************************************
  *
  ****************************************************************************/
+void WEAK NORETURN abort()
+{
+   taskExit();
+   for (;;);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 void WEAK __malloc_lock(struct _reent* _r)
 {
    if (interruptsEnabled())
@@ -64,7 +73,7 @@ void WEAK __malloc_lock(struct _reent* _r)
 void WEAK __malloc_unlock(struct _reent* _r)
 {
    if (interruptsEnabled())
-      mutexUnlock(&mutex);
+      mutexUnlock(&mutex, true);
    else
       kernelUnlock();
 }

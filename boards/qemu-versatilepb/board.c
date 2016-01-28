@@ -131,7 +131,7 @@ static void taskTick(HWTimer* timer)
 {
    unsigned long tickClks = sp804.timer.clk / TASK_TICK_HZ;
    _taskTick(timer->loadValue / tickClks);
-   taskPreempt(true);
+   _taskPreempt(true);
 }
 
 /****************************************************************************
@@ -234,7 +234,7 @@ int main(void* vectors, unsigned long vectorSize, void* stack,
    httpServer.callbacks = HTTP_CALLBACKS;
    httpServer.root = NULL;
    httpServer.index = "index.xhtml";
-   taskStart(&httpTask, httpServerFx, &httpServer, TASK_LOW_PRIORITY);
+   taskStart(&httpTask, httpServerFx, &httpServer, TASK_LOW_PRIORITY, true);
 
    puts("AliOS on ARM");
    enableInterrupts();

@@ -25,6 +25,7 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
+#include <string.h>
 #include "locale.h"
 
 /****************************************************************************
@@ -41,4 +42,12 @@ static const struct lconv _lconv =
 struct lconv* localeconv()
 {
    return (struct lconv*) &_lconv;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+int strcoll(const char *s1, const char *s2)
+{
+   return strcmp(s1, s2);
 }

@@ -78,6 +78,13 @@
 /****************************************************************************
  *
  ****************************************************************************/
+#ifndef TASK_PREEMPTION
+#define TASK_PREEMPTION 0
+#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 #ifndef TASK_AT_EXIT
 #define TASK_AT_EXIT 0
 #endif
@@ -85,19 +92,19 @@
 /****************************************************************************
  *
  ****************************************************************************/
-typedef struct _TaskData
+typedef struct TaskData
 {
    int id;
    void* ptr;
 
-   struct _TaskData* next;
+   struct TaskData* next;
 
 } TaskData;
 
 /****************************************************************************
  *
  ****************************************************************************/
-typedef struct _Task
+typedef struct Task
 {
    const char* name;
    unsigned char state;
@@ -117,7 +124,7 @@ typedef struct _Task
       void* type;
       unsigned long timeout;
       void* ptr;
-      struct _Task* next;
+      struct Task* next;
 
    } wait;
 
@@ -131,7 +138,7 @@ typedef struct _Task
 #endif
    } exit;
 
-   struct _Task* next;
+   struct Task* next;
 
 } Task;
 
@@ -145,6 +152,8 @@ typedef struct _Task
  *    freeOnExit - free task container on task exit
  * Returns:
  *    - pointer to initialized task container
+ * Notes:
+ *    - Should not be called from interrupt context because of kmalloc usage.
  ****************************************************************************/
 Task* taskCreate(const char* name, unsigned long stackSize, bool freeOnExit);
 #endif
@@ -161,7 +170,7 @@ Task* taskCreate(const char* name, unsigned long stackSize, bool freeOnExit);
  *    - true if successful, false otherwise
  * Notes:
  *    - Task container must be in the TASK_STATE_END state.
- *    - Interrupt context safe / Does not yield.
+ *    - Use ONLY within interrupt context.
  ****************************************************************************/
 bool _taskStart(Task* task, void (*fx)(void*), void* arg,
                 unsigned char priority);
@@ -178,22 +187,25 @@ bool _taskStart(Task* task, void (*fx)(void*), void* arg,
  *    - true if successful, false otherwise
  * Notes:
  *    - Task container must be in the TASK_STATE_END state.
- *    - Will yield current task if new task is higher in priority.
- *    - NOT interrupt context safe.
+ *    - Do NOT use within interrupt context.
  ****************************************************************************/
 bool taskStart(Task* task, void (*fx)(void*), void* arg,
                unsigned char priority);
 
+#if TASK_PREEMPTION
 /****************************************************************************
  * Function: _taskPreempt
  *    - Preempts the current task.
  * Arguments:
- *    flag - true = preempt if current level priority (or higher) task ready
- *           false = preempt only if higher priority task is ready
+ *    yield - true = preempt if current level priority (or higher) task ready
+ *            false = preempt only if higher priority task is ready
  * Notes:
- *    - MUST be called from interrupt context.
+ *    - Use ONLY within interrupt context.
  ****************************************************************************/
-void _taskPreempt(bool flag);
+void _taskPreempt(bool yield);
+#else
+#define _taskPreempt(yield)
+#endif
 
 /****************************************************************************
  * Macro: taskYield
@@ -202,7 +214,7 @@ void _taskPreempt(bool flag);
  *    - Yields the current task and runs the next available task of any
  *      priority.
  *    - If no other task is ready, returns immediately.
- *    - NOT interrupt context safe.
+ *    - Do NOT use within interrupt context.
  ****************************************************************************/
 #define taskYield() taskSleep(0)
 
@@ -212,9 +224,20 @@ void _taskPreempt(bool flag);
  * Arguments:
  *    ticks - number of system ticks to sleep
  * Notes:
- *    - NOT interrupt context safe.
+ *    - Do NOT use within interrupt context.
  ****************************************************************************/
 void taskSleep(unsigned long ticks);
+
+/****************************************************************************
+ * Function: _taskPriority
+ *    - Changes the priority of a task.
+ * Arguments:
+ *    task     - task to change priority (NULL changes current task)
+ *    priority - new priority
+ * Notes:
+ *    - Use ONLY within interrupt context.
+ ****************************************************************************/
+void _taskPriority(Task* task, unsigned char priority);
 
 /****************************************************************************
  * Function: taskPriority
@@ -223,8 +246,7 @@ void taskSleep(unsigned long ticks);
  *    task     - task to change priority (NULL changes current task)
  *    priority - new priority
  * Notes:
- *    - May yield current task.
- *    - NOT interrupt context safe.
+ *    - Do NOT use within interrupt context.
  ****************************************************************************/
 void taskPriority(Task* task, unsigned char priority);
 
@@ -232,14 +254,14 @@ void taskPriority(Task* task, unsigned char priority);
  * Function: taskSetData
  *    - Assign thread local data storage.
  * Arguments:
- *    id   - user specific identifier for data
- *    ptr  - pointer to user data (NULL removes "id" from storage)
+ *    id  - user specific identifier for data
+ *    ptr - pointer to user data (NULL removes "id" from storage)
  * Returns:
  *    - true if storage space for user data available, false otherwise
  * Notes:
  *    - If this function returns false, you must define or increase
  *      TASK_NUM_USERDATA (defaults to 0).
- *    - interrupt context safe.
+ *    - Do NOT use within interrupt context.
  ****************************************************************************/
 bool taskSetData(int id, void* ptr);
 
@@ -247,11 +269,11 @@ bool taskSetData(int id, void* ptr);
  * Function: taskGetData
  *    - Retrieves thread local data storage.
  * Arguments:
- *    id   - user specific identifier for data
+ *    id - user specific identifier for data
  * Returns:
  *    - pointer to data, NULL if "id" not found
  * Notes:
- *    - interrupt context safe.
+ *    - OKAY to use within interrupt context.
  ****************************************************************************/
 void* taskGetData(int id);
 
@@ -303,7 +325,7 @@ int taskAtExit(void (*callback)());
  *    - It is NOT required to call this function at the end of the task
  *      function.  It will be automatically called when the task function
  *      exits.
- *    - NOT interrupt context safe.
+ *    - Do NOT use within interrupt context.
  ****************************************************************************/
 void taskExit();
 
@@ -314,7 +336,7 @@ void taskExit();
  *    ticks - number of ticks that have passed
  * Notes:
  *    - This must be called to advance timeouts and timers.
- *    - MUST be called from interrupt context.
+ *    - Use ONLY within interrupt context.
  ****************************************************************************/
 void _taskTick(unsigned long ticks);
 
@@ -392,16 +414,16 @@ void taskInit(Task* task, const char* name, unsigned char priority,
 /****************************************************************************
  *
  ****************************************************************************/
-typedef struct _Timer
+typedef struct Timer
 {
    const char* name;
    Task* task;
-   void (*fx)(void* arg);
+   void (*fx)(struct Timer* timer);
    void* ptr;
    unsigned long ticks[2];
    unsigned char priority;
    unsigned char flags;
-   struct _Timer* next;
+   struct Timer* next;
 
 } Timer;
 
@@ -416,6 +438,7 @@ typedef struct _Timer
  *    - pointer to initialized timer structure
  * Notes:
  *    - Must be destroyed with timerDestroy().
+ *    - Should not be called from interrupt context because of kmalloc usage.
  ****************************************************************************/
 Timer* timerCreate(const char* name, unsigned char flags);
 #endif
@@ -428,9 +451,28 @@ Timer* timerCreate(const char* name, unsigned char flags);
  *    timer - timer previously allocated with timerCreate()
  * Notes:
  *    - Must not be called on an active timer.
+ *    - Should not be called from interrupt context because of kfree usage.
  ****************************************************************************/
 void timerDestroy(Timer* timer);
 #endif
+
+/****************************************************************************
+ * Function: _timerAdd
+ *    - Schedules a timer.
+ * Arguments:
+ *    timer    - timer container to use
+ *    task     - task container to run timer task on
+ *               (NULL if async timer)
+ *    fx       - timer callback (a pointer to the timer is pass as the
+ *               argument to the callback function)
+ *    ptr      - user data (stored in timer container)
+ *    priority - priority of timer task (ignored for async timers)
+ *    ticks    - number of ticks for timer
+ * Notes:
+ *    - Use ONLY within interrupt context.
+ ****************************************************************************/
+void _timerAdd(Timer* timer, Task* task, void (*fx)(Timer*), void* ptr,
+               unsigned char priority, unsigned long ticks);
 
 /****************************************************************************
  * Function: timerAdd
@@ -445,9 +487,9 @@ void timerDestroy(Timer* timer);
  *    priority - priority of timer task (ignored for async timers)
  *    ticks    - number of ticks for timer
  * Notes:
- *    - May be called from interrupt context.
+ *    - Do NOT use within interrupt context.
  ****************************************************************************/
-void timerAdd(Timer* timer, Task* task, void (*fx)(void*), void* ptr,
+void timerAdd(Timer* timer, Task* task, void (*fx)(Timer*), void* ptr,
               unsigned char priority, unsigned long ticks);
 
 /****************************************************************************
@@ -456,7 +498,17 @@ void timerAdd(Timer* timer, Task* task, void (*fx)(void*), void* ptr,
  * Arguments:
  *    timer - timer to cancel
  * Notes:
- *    - May be called from interrupt context.
+ *    - Use ONLY within interrupt context.
+ ****************************************************************************/
+void _timerCancel(Timer* timer);
+
+/****************************************************************************
+ * Function: timerCancel
+ *    - Cancels a timer.
+ * Arguments:
+ *    timer - timer to cancel
+ * Notes:
+ *    - Do NOT use within interrupt context.
  ****************************************************************************/
 void timerCancel(Timer* timer);
 #endif
@@ -525,7 +577,7 @@ typedef struct
 #ifdef kmalloc
 /****************************************************************************
  * Function: queueCreate
- *    - Dynamically allocates a new queue
+ *    - Dynamically allocates a new queue.
  * Arguments:
  *    name        - name of queue
  *    elementSize - size of a single element in bytes
@@ -536,6 +588,7 @@ typedef struct
  *    - Must be destroyed with queueDestroy().
  *    - maxElements of elementSize array is allocated, so use caution when
  *      creating very large queues or queues of very large elements.
+ *    - Should not be called from interrupt context because of kmalloc usage.
  ****************************************************************************/
 Queue* queueCreate(const char* name, unsigned int elementSize,
                    unsigned int maxElements);
@@ -549,6 +602,7 @@ Queue* queueCreate(const char* name, unsigned int elementSize,
  *    queue - queue previously allocated with queueCreate()
  * Notes:
  *    - Must not be called on an active queue.
+ *    - Should not be called from interrupt context because of kfree usage.
  ****************************************************************************/
 void queueDestroy(Queue* queue);
 #endif
@@ -564,7 +618,7 @@ void queueDestroy(Queue* queue);
  *    - true if successful (if space in queue) / false otherwise
  * Notes:
  *    - elementSize bytes of data at src is memory copied into the queue.
- *    - Interrupt context safe / Does not yield.
+ *    - Use ONLY within interrupt context.
  ****************************************************************************/
 bool _queuePush(Queue* queue, bool tail, const void* src);
 
@@ -581,9 +635,10 @@ bool _queuePush(Queue* queue, bool tail, const void* src);
  *    - true if successful (if space in queue) / false otherwise
  * Notes:
  *    - elementSize bytes of data at src is memory copied into the queue.
- *    - NOT interrupt context safe / May yield current task.
+ *    - Do NOT use within interrupt context.
  ****************************************************************************/
 bool queuePush(Queue* queue, bool tail, const void* src, unsigned long ticks);
+
 
 /****************************************************************************
  * Function: _queuePop
@@ -597,7 +652,7 @@ bool queuePush(Queue* queue, bool tail, const void* src, unsigned long ticks);
  *    - true if successful / false otherwise
  * Notes:
  *    - elementSize bytes of data copied from the queue to dst.
- *    - Interrupt context safe / Does not yield.
+ *    - Use ONLY within interrupt context.
  ****************************************************************************/
 bool _queuePop(Queue* queue, bool head, bool peek, void* dst);
 
@@ -615,10 +670,10 @@ bool _queuePop(Queue* queue, bool head, bool peek, void* dst);
  *    - true if successful / false otherwise
  * Notes:
  *    - elementSize bytes of data copied from the queue to dst.
- *    - NOT interrupt context safe / May yield current task.
+ *    - Do NOT use within interrupt context.
  ****************************************************************************/
 bool queuePop(Queue* queue, bool head, bool peek, void* dst,
-             unsigned long ticks);
+              unsigned long ticks);
 #endif
 
 /****************************************************************************
@@ -680,6 +735,7 @@ typedef struct
  *    - pointer to initialized semaphore
  * Notes:
  *    - Must be destroyed with semaphoreDestroy().
+ *    - Should not be called from interrupt context because of kmalloc usage.
  ****************************************************************************/
 Semaphore* semaphoreCreate(const char* name, unsigned int count,
                            unsigned int max);
@@ -693,6 +749,7 @@ Semaphore* semaphoreCreate(const char* name, unsigned int count,
  *    semaphore - semaphore previously allocated with semaphoreCreate()
  * Notes:
  *    - Must not be called on an active semaphore.
+ *    - Should not be called from interrupt context because of kfree usage.
  ****************************************************************************/
 void semaphoreDestroy(Semaphore* semaphore);
 #endif
@@ -707,7 +764,7 @@ void semaphoreDestroy(Semaphore* semaphore);
  * Returns:
  *    - true if successful / false otherwise
  * Notes:
- *    - NOT interrupt context safe / May yield current task.
+ *    - Do NOT use within interrupt context.
  ****************************************************************************/
 bool semaphoreTake(Semaphore* semaphore, unsigned long ticks);
 
@@ -719,7 +776,7 @@ bool semaphoreTake(Semaphore* semaphore, unsigned long ticks);
  * Returns:
  *    - false if more than maximum "signal" count, true otherwise
  * Notes:
- *    - Interrupt context safe / Does not yield.
+ *    - Use ONLY within interrupt context.
  ****************************************************************************/
 bool _semaphoreGive(Semaphore* semaphore);
 
@@ -731,7 +788,7 @@ bool _semaphoreGive(Semaphore* semaphore);
  * Returns:
  *    - false if more than maximum "signal" count, true otherwise
  * Notes:
- *    - NOT interrupt context safe / may yield current task.
+ *    - Do NOT use within interrupt context.
  ****************************************************************************/
 bool semaphoreGive(Semaphore* semaphore);
 #endif
@@ -790,6 +847,7 @@ typedef struct
  *    - pointer to initialized mutex
  * Notes:
  *    - Must be destroyed with mutexDestroy().
+ *    - Should not be called from interrupt context because of kmalloc usage.
  ****************************************************************************/
 Mutex* mutexCreate(const char* name);
 #endif
@@ -802,6 +860,7 @@ Mutex* mutexCreate(const char* name);
  *    mutex - mutex previously allocated with mutexCreate()
  * Notes:
  *    - Must not be called on an active mutex.
+ *    - Should not be called from interrupt context because of kfree usage.
  ****************************************************************************/
 void mutexDestroy(Mutex* mutex);
 #endif
@@ -818,7 +877,7 @@ void mutexDestroy(Mutex* mutex);
  * Notes:
  *    - Will increase priority of task holding the mutex if higher priority
  *      attempts to take lock.
- *    - NOT interrupt context safe / May yield current task.
+ *    - Do NOT use within interrupt context.
  ****************************************************************************/
 bool mutexLock(Mutex* mutex, unsigned long ticks);
 
@@ -828,7 +887,7 @@ bool mutexLock(Mutex* mutex, unsigned long ticks);
  * Arguments:
  *    mutex - mutex to use
  * Notes:
- *    - NOT interrupt context safe / May yield current task.
+ *    - Do NOT use within interrupt context.
  ****************************************************************************/
 void mutexUnlock(Mutex* mutex);
 #endif

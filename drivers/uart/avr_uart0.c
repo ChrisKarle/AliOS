@@ -82,7 +82,7 @@ ISR(USART0_UDRE_vect)
    if (_queuePop(&txQueue, true, false, &c))
    {
       UDR0 = c;
-      taskPreempt(false);
+      _taskPreempt(false);
    }
    else
    {
@@ -100,7 +100,7 @@ ISR(USART0_RX_vect)
    uint8_t c = UDR0;
 
    if (_queuePush(&rxQueue, true, &c))
-      taskPreempt(false);
+      _taskPreempt(false);
 }
 #endif
 
@@ -127,6 +127,7 @@ static bool tx(CharDev* dev, int c)
       while ((UCSR0A & 0x20) == 0);
 
 #if UART0_TX_BUFFER_SIZE > 0
+      /* Interrupts are disabled, so use IRQ variant of queuePop(). */
       while (_queuePop(&txQueue, true, false, &c8))
       {
          UDR0 = c8;
@@ -160,6 +161,7 @@ static int rx(CharDev* dev, bool blocking)
 #endif
    {
 #if UART0_RX_BUFFER_SIZE > 0
+      /* Interrupts are disabled, so use IRQ variant of queuePop(). */
       if (_queuePop(&rxQueue, true, false, &c8))
       {
          c = c8;

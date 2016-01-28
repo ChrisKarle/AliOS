@@ -34,8 +34,48 @@
  ****************************************************************************/
 static bool tx(CharDev* dev, int c)
 {
-   SDR10 = c;
-   while (SSR10 & 0x0020);
+   UART* uart = (UART*) dev;
+
+   if (uart->queue.tx != NULL)
+   {
+      unsigned char c8;
+
+      if (interruptsEnabled())
+      {
+         c8 = (unsigned char) c;
+
+         if (queuePush(uart->queue.tx, true, &c8, uart->dev.timeout.tx))
+         {
+            MK0H &= ~0x01;
+            return true;
+         }
+
+         return false;
+      }
+      else
+      {
+         /* Interrupts are disabled, so use IRQ variant of queuePop(). */
+         while (_queuePop(uart->queue.tx, true, false, &c8))
+         {
+            switch (uart->id)
+            {
+               case UART2:
+                  while (SSR10 & 0x0020);
+                  SDR10 = c8;
+                  break;
+            }
+         }
+      }
+   }
+
+   switch (uart->id)
+   {
+      case UART2:
+         while (SSR10 & 0x0020);
+         SDR10 = (unsigned char) c;
+         break;
+   }
+
    return true;
 }
 
@@ -44,8 +84,95 @@ static bool tx(CharDev* dev, int c)
  ****************************************************************************/
 static int rx(CharDev* dev, bool blocking)
 {
-   while ((SSR11 & 0x0020) == 0);
-   return SDR11;
+   UART* uart = (UART*) dev;
+   int c = EOF;
+
+   if (uart->queue.rx != NULL)
+   {
+      unsigned char c8;
+
+      if (interruptsEnabled())
+      {
+         unsigned long timeout = blocking ? uart->dev.timeout.rx : 0;
+
+         if (queuePop(uart->queue.rx, true, false, &c8, timeout))
+            c = c8;
+
+         return c;
+      }
+      else
+      {
+         /* Interrupts are disabled, so use IRQ variant of queuePop(). */
+         if (_queuePop(uart->queue.rx, true, false, &c8))
+            c = c8;
+      }
+   }
+
+   if (c == EOF)
+   {
+      switch (uart->id)
+      {
+         case UART2:
+            if (blocking)
+               while ((SSR11 & 0x0020) == 0);
+            if (SSR11 & 0x0020)
+               c = (int) SDR11;
+            break;
+      }
+   }
+
+   return c;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void uartTxISR(UART* uart)
+{
+   unsigned char c;
+
+   if (_queuePop(uart->queue.tx, true, false, &c))
+   {
+      switch (uart->id)
+      {
+         case UART2:
+            SDR10 = c;
+            break;
+      }
+
+      _taskPreempt(false);
+   }
+   else
+   {
+      switch (uart->id)
+      {
+         case UART2:
+            MK0H |= 0x01;
+            IF0H |= 0x01;
+            break;
+      }
+   }
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void uartRxISR(UART* uart)
+{
+   switch (uart->id)
+   {
+      case UART2:
+         if (SSR11 & 0x0007)
+            SIR11 = 0x0007;
+
+         if (SSR11 & 0x0020)
+         {
+            unsigned char c = (unsigned char) SDR11;
+            if (_queuePush(uart->queue.rx, true, &c))
+               _taskPreempt(false);
+         }
+         break;
+   }
 }
 
 /****************************************************************************
@@ -54,7 +181,7 @@ static int rx(CharDev* dev, bool blocking)
 void uartInit(UART* uart, unsigned long clk, unsigned long baud,
               unsigned short dps)
 {
-   unsigned int sdr = clk / baud;
+   unsigned int sdr = clk / (2 * baud);
    unsigned int sps = 0;
 
    uart->dev.ioctl = NULL;
@@ -63,7 +190,7 @@ void uartInit(UART* uart, unsigned long clk, unsigned long baud,
    uart->dev.timeout.tx = -1;
    uart->dev.timeout.rx = -1;
 
-   while (sdr > 0xFF)
+   while ((sdr - 1) > 0x7F)
    {
       sdr /= 2;
       sps++;
@@ -80,19 +207,22 @@ void uartInit(UART* uart, unsigned long clk, unsigned long baud,
 
          SMR10 = 0x0023;
          SCR10 = 0x8080 | dps;
-         SDR10 = (sdr & ~1) << 8;
+         SDR10 = (sdr - 1) << 9;
 
          NFEN0 |= 0x10;
          SIR11 = 0x0007;
          SMR11 = 0x0122;
          SCR11 = 0x4480 | dps;
-         SDR11 = (sdr & ~1) << 8;
+         SDR11 = (sdr - 1) << 9;
 
          SO1 |= 0x0001;
          SOE1 |= 0x0001;
          SS1 |= 0x0003;
-         IF0H &= ~0x07;
-         MK0H &= ~0x02;
+         IF0H &= ~0x06;
+         IF0H |= 0x01;
+
+         if (uart->queue.rx != NULL)
+            MK0H &= ~0x06;
          break;
    }
 }

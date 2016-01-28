@@ -43,10 +43,8 @@ static unsigned long x[3] = {0, 0, 0};
 /****************************************************************************
  *
  ****************************************************************************/
-static void fxTask1(void* arg)
+static void fxTask1(Timer* timer)
 {
-   Timer* timer = arg;
-
    x[0]++;
 
    if (timer->flags & TIMER_FLAG_OVERFLOW)
@@ -61,7 +59,7 @@ static void fxTask1(void* arg)
 /****************************************************************************
  *
  ****************************************************************************/
-static void fxTask2(void* arg)
+static void fxTask2(Timer* timer)
 {
    x[2]++;
 }

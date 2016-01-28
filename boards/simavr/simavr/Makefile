@@ -14,7 +14,7 @@ all: $(OUTPUT_FILE)
 ##############################################################################
 #
 ##############################################################################
-C_FLAGS = -Wall -std=c99 -D_BSD_SOURCE
+C_FLAGS = -Wall -std=c99 -D_DEFAULT_SOURCE
 LD_FLAGS = -L./lib -lsimavr -lelf -pthread
 INCLUDES += -I. -I./include
 C_FILES = main.c

@@ -63,8 +63,11 @@ static bool tx(CharDev* dev, int c)
       {
          c8 = (unsigned char) c;
 
-         if (!queuePush(pl011->queue.tx, true, &c8, pl011->dev.timeout.tx))
+         if (!queuePush(pl011->queue.tx, true, &c8, pl011->dev.timeout.tx,
+                        true))
+         {
             return false;
+         }
 
          UARTIMSC(pl011) |= 0x0020;
 
@@ -73,7 +76,7 @@ static bool tx(CharDev* dev, int c)
       else
       {
          while (UARTFR(pl011) & 0x0020);
-         while (_queuePop(pl011->queue.tx, true, false, &c8))
+         while (queuePop(pl011->queue.tx, true, false, &c8, 0, false))
          {
             UART0DR(pl011) = c8;
             while (UARTFR(pl011) & 0x0020);
@@ -103,14 +106,14 @@ static int rx(CharDev* dev, bool blocking)
       {
          unsigned long timeout = blocking ? pl011->dev.timeout.rx : 0;
 
-         if (queuePop(pl011->queue.rx, true, false, &c8, timeout))
+         if (queuePop(pl011->queue.rx, true, false, &c8, timeout, true))
             c = c8;
 
          return c;
       }
       else
       {
-         if (_queuePop(pl011->queue.rx, true, false, &c8))
+         if (queuePop(pl011->queue.rx, true, false, &c8, 0, false))
             c = c8;
       }
    }
@@ -149,7 +152,7 @@ void pl011IRQ(unsigned int n, void* _pl011)
       _queuePush(pl011->queue.rx, true, &c);
    }
 
-   taskPreempt(false);
+   _taskPreempt(false);
 }
 
 /****************************************************************************

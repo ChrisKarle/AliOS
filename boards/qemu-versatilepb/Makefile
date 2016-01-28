@@ -73,7 +73,7 @@ debug: $(BIN_FILE)
 ##############################################################################
 #C_FLAGS = -g -Wall -Wno-main -Wno-address -mcpu=arm926ej-s
 C_FLAGS = -Wall -Wno-main -Wno-address -Os -mcpu=arm926ej-s
-LD_FLAGS = -nostartfiles -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
+LD_FLAGS = -nostartfiles -lm -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I.
 BIN_FILES = fs_data.bin
 C_FILES = board.c
@@ -82,17 +82,13 @@ S_FILES =
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../platforms/arm-gcc
-INCLUDES += -I../../platforms/arm-gcc
-C_FILES += platform.c vic.c sic.c libc_glue.c
-S_FILES += platform_asm.S
+include ../../platforms/arm-gcc/Makefile.inc
+C_FILES += vic.c sic.c
 
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../kernel
-INCLUDES += -I../../kernel
-C_FILES += kernel.c
+include ../../kernel/Makefile.inc
 
 ##############################################################################
 #
@@ -110,6 +106,7 @@ C_FILES += pl011.c sp804.c mem_dev.c vfs.c romfs.c lan91c.c armv7_mmu.c
 #
 ##############################################################################
 include ../../extras/lwip/Makefile.inc
+include ../../extras/lua/Makefile.inc
 
 ##############################################################################
 #

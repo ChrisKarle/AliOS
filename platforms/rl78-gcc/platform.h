@@ -33,10 +33,21 @@
 /****************************************************************************
  *
  ****************************************************************************/
+#define ADM2  (*(volatile unsigned char*)  0x0010)
+#define ADUL  (*(volatile unsigned char*)  0x0011)
+#define ADLL  (*(volatile unsigned char*)  0x0012)
+#define ADTES (*(volatile unsigned char*)  0x0013)
+#define PMC0  (*(volatile unsigned char*)  0x0060)
+#define PMC3  (*(volatile unsigned char*)  0x0063)
+#define PMC10 (*(volatile unsigned char*)  0x006A)
+#define PMC11 (*(volatile unsigned char*)  0x006B)
+#define PMC12 (*(volatile unsigned char*)  0x006C)
+#define PMC14 (*(volatile unsigned char*)  0x006E)
 #define NFEN0 (*(volatile unsigned char*)  0x0070)
 #define NFEN1 (*(volatile unsigned char*)  0x0071)
 #define ISC   (*(volatile unsigned char*)  0x0073)
 #define TIS0  (*(volatile unsigned char*)  0x0074)
+#define ADPC  (*(volatile unsigned char*)  0x0076)
 #define PER0  (*(volatile unsigned char*)  0x00F0)
 #define OSMC  (*(volatile unsigned char*)  0x00F3)
 #define SSR00 (*(volatile unsigned short*) 0x0100)
@@ -135,6 +146,7 @@
 #define SDR13 (*(volatile unsigned short*) 0xFF16)
 #define TDR00 (*(volatile unsigned short*) 0xFF18)
 #define TDR01 (*(volatile unsigned short*) 0xFF1A)
+#define ADCR  (*(volatile unsigned short*) 0xFF1E)
 #define PM0   (*(volatile unsigned char*)  0xFF20)
 #define PM1   (*(volatile unsigned char*)  0xFF21)
 #define PM2   (*(volatile unsigned char*)  0xFF22)
@@ -150,6 +162,9 @@
 #define PM12  (*(volatile unsigned char*)  0xFF2C)
 #define PM14  (*(volatile unsigned char*)  0xFF2E)
 #define PM15  (*(volatile unsigned char*)  0xFF2F)
+#define ADM0  (*(volatile unsigned char*)  0xFF30)
+#define ADS   (*(volatile unsigned char*)  0xFF31)
+#define ADM1  (*(volatile unsigned char*)  0xFF32)
 #define ITMC  (*(volatile unsigned short*) 0xFF90)
 #define SDR02 (*(volatile unsigned short*) 0xFF44)
 #define SDR03 (*(volatile unsigned short*) 0xFF46)
@@ -170,17 +185,6 @@
 #define MK2L  (*(volatile unsigned char*)  0xFFD4)
 #define MK2H  (*(volatile unsigned char*)  0xFFD5)
 #define MK3L  (*(volatile unsigned char*)  0xFFD6)
-
-/****************************************************************************
- *
- ****************************************************************************/
-#define RL78_CORE_S1 1
-#define RL78_CORE_S2 2
-#define RL78_CORE_S3 3
-
-#ifndef RL78_CORE
-#define RL78_CORE RL78_CORE_S1
-#endif
 
 /****************************************************************************
  *
@@ -235,6 +239,7 @@
 /****************************************************************************
  *
  ****************************************************************************/
+#define INTERRUPT __attribute__((interrupt))
 #define NORETURN __attribute__((noreturn))
 #define WEAK __attribute__((weak))
 
@@ -271,8 +276,7 @@
  ****************************************************************************/
 static inline bool interruptsEnabled()
 {
-   unsigned char psw;
-   __asm__ __volatile__("mov a, psw" : "=r" (psw) : : "a");
+   unsigned char psw = *(volatile unsigned char*) 0xFFFA;
    return psw & 0x80;
 }
 

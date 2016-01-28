@@ -25,6 +25,7 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
+#include <stdint.h>
 #include <string.h>
 #include "platform.h"
 
@@ -36,24 +37,12 @@
 /****************************************************************************
  *
  ****************************************************************************/
-void* _brk[2] = {NULL, NULL};
+void __taskSwitch(void** current, void* next);
 
 /****************************************************************************
  *
  ****************************************************************************/
-static struct
-{
-   bool state;
-
-} lock;
-
-/****************************************************************************
- *
- ****************************************************************************/
-void _kernelLock()
-{
-   lock.state = true;
-}
+void _kernelLock() {}
 
 /****************************************************************************
  *
@@ -65,7 +54,7 @@ void _kernelUnlock() {}
  ****************************************************************************/
 void kernelLock()
 {
-   lock.state = disableInterrupts();
+   disableInterrupts();
 }
 
 /****************************************************************************
@@ -73,8 +62,7 @@ void kernelLock()
  ****************************************************************************/
 void kernelUnlock()
 {
-   if (lock.state)
-      enableInterrupts();
+   enableInterrupts();
 }
 
 /****************************************************************************
@@ -82,38 +70,41 @@ void kernelUnlock()
  ****************************************************************************/
 void taskSetup(Task* task, void (*fx)(void*, void*), void* arg1, void* arg2)
 {
-   unsigned short* stack = (unsigned short*) task->stack.base +
-                           task->stack.size / 2;
+   uint16_t* stack = (uint16_t*) task->stack.base + task->stack.size / 2;
 
 #if TASK_STACK_USAGE
    memset(task->stack.base, STACK_MARKER, task->stack.size);
 #endif
 
-   stack[-1] = (unsigned short) arg1;
-   stack[-2] = (unsigned short) arg2;
-   stack[-3] = 0x8600;
-   stack[-4] = (unsigned short) fx;
-#if RL78_CORE > RL78_CORE_S1
-   stack[-5] = 0xFFFF;
-   stack[-6] = 0xEEEE;
-   stack[-7] = 0xDDDD;
-   stack[-8] = 0xCCCC;
-   stack[-9] = 0xBBBB;
-   stack[-10] = 0xAAAA;
-   stack[-11] = 0x9999;
-   stack[-12] = 0x8888;
-   stack[-13] = 0x7777;
-   stack[-14] = 0x6666;
-   stack[-15] = 0x5555;
-   stack[-16] = 0x4444;
+   stack[-1] = (uint16_t) arg2;
+   stack[-2] = (uint16_t) arg1;
+   stack[-3] = 0x0000;
+   stack[-4] = 0x0000;
+   stack[-5] = 0x0000;
+   stack[-6] = (uint16_t) fx;
+   stack[-7] = 0x8600; /* PSW */
+   stack[-8] = 0x0000;
+   stack[-9] = 0x1111;
+   stack[-10] = 0x2222;
+   stack[-11] = 0x3333;
+   stack[-12] = 0x000F;
+#if defined(__RL78_G13__) || defined(__RL78_G14__)
+   stack[-13] = 0x4444;
+   stack[-14] = 0x5555;
+   stack[-15] = 0x6666;
+   stack[-16] = 0x7777;
+   stack[-17] = 0x8888;
+   stack[-18] = 0x9999;
+   stack[-19] = 0xAAAA;
+   stack[-20] = 0xBBBB;
+   stack[-21] = 0xCCCC;
+   stack[-22] = 0xDDDD;
+   stack[-23] = 0xEEEE;
+   stack[-24] = 0xFFFF;
+   task->stack.ptr = stack - 24;
+#else
+   task->stack.ptr = stack - 12;
 #endif
-   stack[-17] = 0x3333;
-   stack[-18] = 0x2222;
-   stack[-19] = 0x1111;
-   stack[-20] = 0x0000;
-   stack[-21] = 0x000F;
-
-   task->stack.ptr = stack - 21;
 }
 
 #if TASK_STACK_USAGE
@@ -135,10 +126,7 @@ unsigned long taskStackUsage(Task* task)
 /****************************************************************************
  *
  ****************************************************************************/
-void _taskEntry(Task* task)
-{
-   kernelUnlock();
-}
+void _taskEntry(Task* task) {}
 
 /****************************************************************************
  *
@@ -150,9 +138,7 @@ void _taskExit(Task* task) {}
  ****************************************************************************/
 void _taskSwitch(Task* current, Task* next)
 {
-   _brk[0] = &current->stack.ptr;
-   _brk[1] = next->stack.ptr;
-   __asm__ __volatile__("brk");
+   __taskSwitch(&current->stack.ptr, next->stack.ptr);
 }
 
 /****************************************************************************
@@ -160,11 +146,8 @@ void _taskSwitch(Task* current, Task* next)
  ****************************************************************************/
 void _taskInit(Task* task, void* stackBase, unsigned long stackSize)
 {
-#if 0
+   unsigned char* sp = *(unsigned char**) 0xFFF8;
    unsigned char* stack = NULL;
-   unsigned char* sp = NULL;
-
-   __asm__ __volatile__("mov r0, %0" : "=r" (sp));
 
    task->stack.base = stackBase;
    task->stack.size = stackSize;
@@ -174,5 +157,4 @@ void _taskInit(Task* task, void* stackBase, unsigned long stackSize)
    /* cannot use memset here */
    while (stack < sp)
       *stack++ = STACK_MARKER;
-#endif
 }

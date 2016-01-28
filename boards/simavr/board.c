@@ -50,6 +50,19 @@
 /****************************************************************************
  *
  ****************************************************************************/
+extern uint8_t __stack[];
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static ReadlineData readlineData = READLINE_DATA(256);
+static HistoryData historyData = HISTORY_DATA(4);
+static Task task0;
+static CharDev uart0;
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 static void taskListCmd(int argc, char* argv[])
 {
    taskList();
@@ -67,19 +80,6 @@ static const ShellCmd SHELL_CMDS[] =
    {"timer_test", timerTestCmd},
    {NULL, NULL}
 };
-
-/****************************************************************************
- *
- ****************************************************************************/
-extern uint8_t __stack[];
-
-/****************************************************************************
- *
- ****************************************************************************/
-static ReadlineData readlineData = READLINE_DATA(256);
-static HistoryData historyData = HISTORY_DATA(4);
-static Task task;
-static CharDev uart0;
 
 /****************************************************************************
  *
@@ -168,8 +168,7 @@ ISR(TIMER2_COMPA_vect)
 #endif
 
    _taskTick(ticks);
-
-   taskPreempt(false);
+   _taskPreempt(true);
 }
 
 /****************************************************************************
@@ -179,7 +178,7 @@ int main()
 {
    void* stackBase = __stack - TASK0_STACK_SIZE + 1;
 
-   taskInit(&task, "main", TASK_LOW_PRIORITY, stackBase, TASK0_STACK_SIZE);
+   taskInit(&task0, "main", TASK_LOW_PRIORITY, stackBase, TASK0_STACK_SIZE);
    uart0Init(&uart0);
    libcInit(&uart0);
 
