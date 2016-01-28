@@ -19,3 +19,4 @@ Ports for the following are available.
    - AVR (only tested with Atmega1280)
    - ARM (only tested with QEMU versatilepb & vexpress-a9)
    - RX62N tested on RDKRX62N eval board
+   - RL78 tested on YRPBRL78G13 eval board
