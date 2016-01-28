@@ -498,7 +498,7 @@ int vfsOpen(const vfs_char_t* path)
    else
       status = VFS_PATH_NOT_FOUND;
 
-   mutexUnlock(&lock, true);
+   mutexUnlock(&lock);
 
    return status;
 }
@@ -529,7 +529,7 @@ int vfsOpen2(int id, const vfs_char_t* path)
       status = VFS_INVALID_FD;
    }
 
-   mutexUnlock(&lock, true);
+   mutexUnlock(&lock);
 
    return status;
 }
@@ -557,7 +557,7 @@ void vfsClose(int id)
       free(fd);
    }
 
-   mutexUnlock(&lock, true);
+   mutexUnlock(&lock);
 }
 
 /****************************************************************************
@@ -570,7 +570,7 @@ vfs_char_t* vfsIter(int id, void** iter)
 
    mutexLock(&lock, -1);
    fd = fdFind(id, NULL);
-   mutexUnlock(&lock, true);
+   mutexUnlock(&lock);
 
    if (fd != NULL)
       name = fd->file->vfs->iter(fd->file->vfs, fd->file->data, iter);
@@ -587,7 +587,7 @@ void vfsIterStop(int id, void* iter)
 
    mutexLock(&lock, -1);
    fd = fdFind(id, NULL);
-   mutexUnlock(&lock, true);
+   mutexUnlock(&lock);
 
    if (fd != NULL)
       fd->file->vfs->iterStop(fd->file->vfs, fd->file->data, iter);
@@ -602,7 +602,7 @@ unsigned long vfsRead(int id, void* buffer, unsigned long count)
 
    mutexLock(&lock, -1);
    fd = fdFind(id, NULL);
-   mutexUnlock(&lock, true);
+   mutexUnlock(&lock);
 
    if (fd != NULL)
    {
@@ -650,7 +650,7 @@ int vfsStat(const vfs_char_t* path, unsigned int* mode, unsigned long* size,
       status = VFS_PATH_NOT_FOUND;
    }
 
-   mutexUnlock(&lock, true);
+   mutexUnlock(&lock);
 
    return status;
 }
@@ -700,7 +700,7 @@ int vfsStat2(int id, const vfs_char_t* path, unsigned int* mode,
       status = VFS_INVALID_FD;
    }
 
-   mutexUnlock(&lock, true);
+   mutexUnlock(&lock);
 
   return status;
 }
@@ -715,7 +715,7 @@ vfs_char_t* vfsGetCWD()
 
    mutexLock(&lock, -1);
    path = filePath(cwd);
-   mutexUnlock(&lock, true);
+   mutexUnlock(&lock);
 
    return path;
 }
@@ -753,7 +753,7 @@ int vfsChDir(const vfs_char_t* path)
       status = VFS_PATH_NOT_FOUND;
    }
 
-   mutexUnlock(&lock, true);
+   mutexUnlock(&lock);
 
    return status;
 }
@@ -832,7 +832,7 @@ int vfsMount(VFS* vfs, const vfs_char_t* path)
       free(file);
    }
 
-   mutexUnlock(&lock, true);
+   mutexUnlock(&lock);
 
    return status;
 }
@@ -868,6 +868,6 @@ void vfsInfo(int argc, char* argv[])
       fd = fd->next;
    }
 
-   mutexUnlock(&lock, true);
+   mutexUnlock(&lock);
 }
 #endif

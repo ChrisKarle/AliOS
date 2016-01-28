@@ -234,7 +234,7 @@ int main(void* vectors, unsigned long vectorSize, void* stack,
    httpServer.callbacks = HTTP_CALLBACKS;
    httpServer.root = NULL;
    httpServer.index = "index.xhtml";
-   taskStart(&httpTask, httpServerFx, &httpServer, TASK_LOW_PRIORITY, true);
+   taskStart(&httpTask, httpServerFx, &httpServer, TASK_LOW_PRIORITY);
 
    puts("AliOS on ARM");
    enableInterrupts();

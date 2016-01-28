@@ -73,7 +73,7 @@ void WEAK __malloc_lock(struct _reent* _r)
 void WEAK __malloc_unlock(struct _reent* _r)
 {
    if (interruptsEnabled())
-      mutexUnlock(&mutex, true);
+      mutexUnlock(&mutex);
    else
       kernelUnlock();
 }

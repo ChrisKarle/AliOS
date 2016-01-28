@@ -46,7 +46,7 @@ static volatile u32_t lwipTicks = 0;
 /****************************************************************************
  *
  ****************************************************************************/
-static void lwipTimerFx(void* timer)
+static void lwipTimerFx(Timer* timer)
 {
    lwipTicks += LWIP_TICKS;
 }
@@ -74,7 +74,7 @@ void sys_sem_free(sys_sem_t* sem) {}
  ****************************************************************************/
 void sys_sem_signal(sys_sem_t* sem)
 {
-   semaphoreGive(sem, true);
+   semaphoreGive(sem);
 }
 
 /****************************************************************************
@@ -151,7 +151,7 @@ void sys_mbox_free(sys_mbox_t* mbox)
  ****************************************************************************/
 void sys_mbox_post(sys_mbox_t* mbox, void* msg)
 {
-   queuePush(mbox, true, &msg, -1, true);
+   queuePush(mbox, true, &msg, -1);
 }
 
 /****************************************************************************
@@ -159,7 +159,7 @@ void sys_mbox_post(sys_mbox_t* mbox, void* msg)
  ****************************************************************************/
 err_t sys_mbox_trypost(sys_mbox_t* mbox, void* msg)
 {
-   if (!queuePush(mbox, true, &msg, 0, true))
+   if (!queuePush(mbox, true, &msg, 0))
       return ERR_MEM;
 
    return ERR_OK;
@@ -178,7 +178,7 @@ u32_t sys_arch_mbox_fetch(sys_mbox_t* mbox, void** msg, u32_t timeout)
    else
       ticks = -1;
 
-   if (!queuePop(mbox, true, false, msg, ticks, true))
+   if (!queuePop(mbox, true, false, msg, ticks))
       return SYS_ARCH_TIMEOUT;
 
    if (timeout > 0)
@@ -199,7 +199,7 @@ u32_t sys_arch_mbox_fetch(sys_mbox_t* mbox, void** msg, u32_t timeout)
  ****************************************************************************/
 u32_t sys_arch_mbox_tryfetch(sys_mbox_t* mbox, void** msg)
 {
-   if (!queuePop(mbox, true, false, msg, 0, true))
+   if (!queuePop(mbox, true, false, msg, 0))
       return SYS_MBOX_EMPTY;
 
    return 0;
@@ -253,7 +253,7 @@ void sys_mutex_lock(sys_mutex_t* mutex)
  ****************************************************************************/
 void sys_mutex_unlock(sys_mutex_t* mutex)
 {
-   mutexUnlock(mutex, true);
+   mutexUnlock(mutex);
 }
 
 /****************************************************************************
@@ -279,7 +279,7 @@ sys_thread_t sys_thread_new(const char* name, void (*thread)(void* arg),
                             void* arg, int stackSize, int priority)
 {
    Task* task = taskCreate(name, stackSize, true);
-   taskStart(task, thread, arg, priority, true);
+   taskStart(task, thread, arg, priority);
    return task;
 }
 
@@ -297,7 +297,7 @@ sys_prot_t sys_arch_protect()
  ****************************************************************************/
 void sys_arch_unprotect(sys_prot_t state)
 {
-   mutexUnlock(&lwipLock, true);
+   mutexUnlock(&lwipLock);
 }
 
 /****************************************************************************

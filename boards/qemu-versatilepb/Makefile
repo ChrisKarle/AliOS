@@ -106,7 +106,6 @@ C_FILES += pl011.c sp804.c mem_dev.c vfs.c romfs.c lan91c.c armv7_mmu.c
 #
 ##############################################################################
 include ../../extras/lwip/Makefile.inc
-include ../../extras/lua/Makefile.inc
 
 ##############################################################################
 #
