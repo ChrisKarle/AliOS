@@ -65,8 +65,8 @@ SECTIONS
    .text :
    {
       __text__ = .;
-      *(.text)
       *(.plt)
+      *(.text)
       __text_end__ = .;
 
    } >rom :text
