@@ -93,31 +93,31 @@
 /****************************************************************************
  *
  ****************************************************************************/
-typedef struct _VFS
+typedef struct VFS
 {
-   int (*open)(struct _VFS* vfs, void* dir, void** file,
+   int (*open)(struct VFS* vfs, void* dir, void** file,
                const vfs_char_t* name);
-   void (*close)(struct _VFS* vfs, void* file);
+   void (*close)(struct VFS* vfs, void* file);
 
-   int (*create)(struct _VFS* vfs, void* dir, void** file,
+   int (*create)(struct VFS* vfs, void* dir, void** file,
                  const vfs_char_t* name, unsigned int mode);
-   int (*move)(struct _VFS* vfs, void* dir1, void* file1, void* dir2,
+   int (*move)(struct VFS* vfs, void* dir1, void* file1, void* dir2,
                void** file2, const vfs_char_t* name);
-   int (*unlink)(struct _VFS* vfs, void* dir, void* file);
+   int (*unlink)(struct VFS* vfs, void* dir, void* file);
 
-   vfs_char_t* (*iter)(struct _VFS* vfs, void* dir, void** iter);
-   void (*iterStop)(struct _VFS* vfs, void* dir, void* iter);
+   vfs_char_t* (*iter)(struct VFS* vfs, void* dir, void** iter);
+   void (*iterStop)(struct VFS* vfs, void* dir, void* iter);
 
-   unsigned long (*read)(struct _VFS* vfs, void* file, void* buffer,
+   unsigned long (*read)(struct VFS* vfs, void* file, void* buffer,
                          unsigned long offset, unsigned long count);
-   unsigned long (*write)(struct _VFS* vfs, void* file, const void* buffer,
+   unsigned long (*write)(struct VFS* vfs, void* file, const void* buffer,
                           unsigned long offset, unsigned long count);
 
-   unsigned int (*getMode)(struct _VFS* vfs, void* file);
-   int (*setMode)(struct _VFS* vfs, void* file, unsigned int mode);
+   unsigned int (*getMode)(struct VFS* vfs, void* file);
+   int (*setMode)(struct VFS* vfs, void* file, unsigned int mode);
 
-   unsigned long (*size)(struct _VFS* vfs, void* file);
-   void (*times)(struct _VFS* vfs, void* file, uint64_t* otime,
+   unsigned long (*size)(struct VFS* vfs, void* file);
+   void (*times)(struct VFS* vfs, void* file, uint64_t* otime,
                  uint64_t* ctime, uint64_t* mtime, uint64_t* atime);
 
    void* data;

@@ -53,7 +53,7 @@ static void fxTimer(Timer* _timer)
    if (_semaphoreGive(&semaphore1))
       x[0]++;
 
-   timerAdd(_timer, NULL, fxTimer, NULL, 0, rand() % 100);
+   _timerAdd(_timer, NULL, fxTimer, NULL, 0, rand() % 100);
 }
 
 /****************************************************************************

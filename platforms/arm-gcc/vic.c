@@ -78,7 +78,7 @@
 /****************************************************************************
  *
  ****************************************************************************/
-static void addHandler(struct _IrqCtrl* ctrl, unsigned int n,
+static void addHandler(struct IrqCtrl* ctrl, unsigned int n,
                        void (*fx)(unsigned int, void*), void* arg, bool edge,
                        unsigned int cpuMask)
 {

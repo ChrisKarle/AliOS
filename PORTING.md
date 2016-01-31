@@ -111,6 +111,15 @@ of system timer/ticks that have elapsed.  See taskTimer().
 
 ---
 ```c
+#define _taskYield
+```
+This macro defines a function that is called whenever a task yields the
+processor.  This is useful in implementing "fair timeslicing", where a task
+always receives a "full" timeslice.  This would only be required when
+preemption is used, which is rarely necessary in embedded.
+
+---
+```c
 void smpWake(int cpu)
 ```
 This function is called by the kernel when SMP is defined.  It is used to wake

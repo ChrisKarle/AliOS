@@ -70,8 +70,8 @@ debug: $(BIN_FILE)
 ##############################################################################
 #
 ##############################################################################
-#C_FLAGS = -g -Wall -Wno-main -Wno-address -mcpu=cortex-a9 -DSMP=2
-C_FLAGS = -Wall -Wno-main -Wno-address -Os -mcpu=cortex-a9 -DSMP=2
+C_FLAGS = -g -Wall -Wno-main -Wno-address -mcpu=cortex-a9 -DSMP=2
+#C_FLAGS = -Wall -Wno-main -Wno-address -Os -mcpu=cortex-a9 -DSMP=2
 LD_FLAGS = -nostartfiles -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I.
 C_FILES = board.c
@@ -80,17 +80,13 @@ S_FILES = board_smp.S
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../platforms/arm-gcc
-INCLUDES += -I../../platforms/arm-gcc
-C_FILES += platform.c gic.c libc_glue.c
-S_FILES += platform_asm.S
+include ../../platforms/arm-gcc/Makefile.inc
+C_FILES += gic.c
 
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../kernel
-INCLUDES += -I../../kernel
-C_FILES += kernel.c
+include ../../kernel/Makefile.inc
 
 ##############################################################################
 #
@@ -99,7 +95,7 @@ VPATH += ../../drivers/mmu
 VPATH += ../../drivers/timer
 VPATH += ../../drivers/uart
 INCLUDES += -I../../drivers
-C_FILES += pl011.c sp804.c armv7_mmu.c
+C_FILES += armv7_mmu.c pl011.c sp804.c
 
 ##############################################################################
 #

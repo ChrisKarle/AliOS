@@ -1875,7 +1875,7 @@ bool mutexLock(Mutex* mutex, unsigned long ticks)
          current->wait.ptr = &success;
 
          if (current->priority < mutex->owner->priority)
-            _taskPriority(mutex->owner, current->priority);
+            __taskPriority(mutex->owner, current->priority);
 
          mutexAddWait(mutex, current);
          taskTimeout(TASK_STATE_MUTEX, ticks);
@@ -1906,7 +1906,7 @@ void mutexUnlock(Mutex* mutex)
       {
          Task* task = NULL;
 
-         _taskPriority(current, mutex->priority);
+         __taskPriority(current, mutex->priority);
 
          *(bool*) mutex->task->wait.ptr = true;
 

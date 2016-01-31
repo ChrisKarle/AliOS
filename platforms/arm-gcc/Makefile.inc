@@ -41,4 +41,4 @@ INCLUDES += -I$(PLATFORM_PATH)
 ##############################################################################
 VPATH += $(PLATFORM_PATH)
 C_FILES += platform.c libc_glue.c
-S_FILES = platform_asm.S
+S_FILES += platform_asm.S

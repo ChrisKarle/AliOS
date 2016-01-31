@@ -41,17 +41,6 @@
 /****************************************************************************
  *
  ****************************************************************************/
-#ifndef ABORT_STACK_SIZE
-#define ABORT_STACK_SIZE 1024
-#endif
-
-#ifndef FIQ_STACK_SIZE
-#define FIQ_STACK_SIZE 1024
-#endif
-
-/****************************************************************************
- *
- ****************************************************************************/
 #define CPU_MODE_USER       0x10
 #define CPU_MODE_FIQ        0x11
 #define CPU_MODE_IRQ        0x12
@@ -91,6 +80,17 @@
 #define X32_F "lx"
 #define SZT_F "z"
 
+/****************************************************************************
+ *
+ ****************************************************************************/
+#ifndef ABORT_STACK_SIZE
+#define ABORT_STACK_SIZE 1024
+#endif
+
+#ifndef FIQ_STACK_SIZE
+#define FIQ_STACK_SIZE 1024
+#endif
+
 #ifndef __ASM__
 /****************************************************************************
  *
@@ -109,9 +109,9 @@
 /****************************************************************************
  *
  ****************************************************************************/
-typedef struct _IrqCtrl
+typedef struct IrqCtrl
 {
-   void (*addHandler)(struct _IrqCtrl* ctrl, unsigned int n,
+   void (*addHandler)(struct IrqCtrl* ctrl, unsigned int n,
                       void (*fx)(unsigned int, void*), void* arg, bool edge,
                       unsigned int cpuMask);
 
@@ -147,7 +147,6 @@ static inline void cacheEnable(bool iCache, bool dCache)
 static inline void vectorsHigh()
 {
    unsigned long cr;
-
    __asm__ __volatile__("mrc p15, 0, %0, c1, c0, 0" : "=r" (cr));
    cr |= 0x00002000;
    __asm__ __volatile__("mcr p15, 0, %0, c1, c0, 0" : : "r" (cr));
@@ -166,17 +165,6 @@ static inline bool interruptsEnabled()
 /****************************************************************************
  *
  ****************************************************************************/
-static inline void enableInterrupts()
-{
-   unsigned long cpsr;
-   __asm__ __volatile__("mrs %0, CPSR" : "=r" (cpsr));
-   __asm__ __volatile__("msr CPSR, %0" : : "r" (cpsr & ~CPU_I_BIT) :
-                        "memory");
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
 static inline bool disableInterrupts()
 {
    unsigned long cpsr;
@@ -184,6 +172,17 @@ static inline bool disableInterrupts()
    __asm__ __volatile__("msr CPSR, %0" : : "r" (cpsr | CPU_I_BIT) :
                         "memory");
    return (cpsr & CPU_I_BIT) ? false : true;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static inline void enableInterrupts()
+{
+   unsigned long cpsr;
+   __asm__ __volatile__("mrs %0, CPSR" : "=r" (cpsr));
+   __asm__ __volatile__("msr CPSR, %0" : : "r" (cpsr & ~CPU_I_BIT) :
+                        "memory");
 }
 
 /****************************************************************************

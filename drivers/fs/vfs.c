@@ -47,7 +47,7 @@
 /****************************************************************************
  *
  ****************************************************************************/
-typedef struct _File
+typedef struct File
 {
    VFS* vfs;
    void* data;
@@ -55,21 +55,21 @@ typedef struct _File
    unsigned int mode;
    unsigned int flags;
    unsigned int refs;
-   struct _File* parent;
-   struct _File* children;
-   struct _File* sibling;
+   struct File* parent;
+   struct File* children;
+   struct File* sibling;
 
 } File;
 
 /****************************************************************************
  *
  ****************************************************************************/
-typedef struct _FD
+typedef struct FD
 {
    int id;
    unsigned long offset;
    File* file;
-   struct _FD* next;
+   struct FD* next;
 
 } FD;
 

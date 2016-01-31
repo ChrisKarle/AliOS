@@ -42,6 +42,29 @@
 /****************************************************************************
  *
  ****************************************************************************/
+static GIC gic = GIC_CREATE(0x1E000100, 0x1E001000);
+
+static PL011 pl011 = PL011_CREATE
+(
+   0x10009000,
+   NULL,
+   QUEUE_CREATE_PTR("pl011_rx", 1, 8)
+);
+
+static SP804 sp804 = SP804_CREATE(0x10011000);
+static HistoryData historyData = HISTORY_DATA(10);
+
+static MMU mmu;
+
+#ifdef SMP
+static Task task[SMP];
+#else
+static Task task[1];
+#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 static void taskListCmd(int argc, char* argv[])
 {
    taskList();
@@ -63,37 +86,35 @@ static const ShellCmd SHELL_CMDS[] =
 /****************************************************************************
  *
  ****************************************************************************/
-static unsigned long ALIGNED(4096) mmuPage[1024];
+static void taskTick(HWTimer* timer)
+{
+   _taskTick(1);
+#if TASK_PREEMPTION
+#ifdef SMP
+   gicSGI(&gic, -1, 1);
+#endif
+   _taskPreempt(true);
+#endif
+}
 
-static PL011 pl011 = PL011_CREATE
-(
-   0x10009000,
-   NULL,
-   QUEUE_CREATE_PTR("pl011_rx", 1, 8)
-);
-
-static SP804 sp804 = SP804_CREATE(0x10011000);
-static GIC gic = GIC_CREATE(0x1E000100, 0x1E001000);
-static HistoryData historyData = HISTORY_DATA(10);
-static Task task[SMP];
-static MMU mmu;
-
+#ifdef SMP
 /****************************************************************************
  *
  ****************************************************************************/
 static void sgiIRQ(unsigned int n, void* arg)
 {
+#if TASK_PREEMPTION
    if (n > 0)
-      _taskPreempt(n > 1);
+      _taskPreempt(true);
+#endif
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void taskTick(HWTimer* timer)
+void smpWake(int cpu)
 {
-   _taskTick(1);
-   taskPreempt(true);
+   gicSGI(&gic, cpu, 0);
 }
 
 /****************************************************************************
@@ -106,12 +127,14 @@ static void smpInit()
    *jmpPtr = _smpInit;
    smpWake(-1);
 }
+#endif
 
 /****************************************************************************
  *
  ****************************************************************************/
 void* mmuGetPage(unsigned int count)
 {
+   static unsigned long ALIGNED(4096) mmuPage[1024];
    return mmuPage;
 }
 
@@ -136,30 +159,12 @@ void taskWait()
 /****************************************************************************
  *
  ****************************************************************************/
-void taskPreempt(bool flag)
-{
-#if TASK_PREEMPTION
-   gicSGI(&gic, -1, flag ? 2 : 1);
-   _taskPreempt(flag);
-#endif
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-void smpWake(int cpu)
-{
-   gicSGI(&gic, cpu, 0);
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-void _irqVector()
+void _irq()
 {
    gicIRQ(0, &gic);
 }
 
+#ifdef SMP
 /****************************************************************************
  *
  ****************************************************************************/
@@ -174,14 +179,14 @@ void smpMain(void* stack, unsigned long size)
    enableInterrupts();
 
    for (;;)
-      taskSleep(TASK_TICK_HZ);
+      taskSleep(TICK_HZ);
 }
+#endif
 
 /****************************************************************************
  *
  ****************************************************************************/
-int main(void* vectors, unsigned long vectorSize, void* stack,
-         unsigned long stackSize)
+int main(void* vectors, void* stack, unsigned long stackSize)
 {
    mmuInit(&mmu);
    mmuMap(&mmu, MMU_MODE_KR | MMU_MODE_X | MMU_MODE_C | MMU_MODE_B,
@@ -200,13 +205,14 @@ int main(void* vectors, unsigned long vectorSize, void* stack,
    gic.ctrl.addHandler(&gic.ctrl, 34, sp804IRQ, &sp804, true, 1 << cpuID());
    sp804.timer.callback = taskTick;
    sp804.timer.periodic = true;
-   sp804.timer.load(&sp804.timer, sp804.timer.clk / TASK_TICK_HZ);
+   sp804.timer.load(&sp804.timer, sp804.timer.clk / TICK_HZ);
    sp804.timer.enable(&sp804.timer, true);
 
+#ifdef SMP
    gic.ctrl.addHandler(&gic.ctrl, 0, sgiIRQ, NULL, true, 0xFF);
    gic.ctrl.addHandler(&gic.ctrl, 1, sgiIRQ, NULL, true, 0xFF);
-   gic.ctrl.addHandler(&gic.ctrl, 2, sgiIRQ, NULL, true, 0xFF);
    smpInit();
+#endif
 
    puts("AliOS on ARM");
    enableInterrupts();
@@ -217,7 +223,6 @@ int main(void* vectors, unsigned long vectorSize, void* stack,
    timerTest();
 
    taskSetData(HISTORY_DATA_ID, &historyData);
-
    shellRun(SHELL_CMDS);
 
    return 0;

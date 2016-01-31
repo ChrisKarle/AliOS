@@ -27,6 +27,18 @@
  ****************************************************************************/
 #include "platform.h"
 
+/****************************************************************************
+ *
+ ****************************************************************************/
+   .bss
+   .p2align 2
+__abort_stack:
+   .skip ABORT_STACK_SIZE
+__fiq_stack:
+   .skip FIQ_STACK_SIZE
+__stack:
+   .skip TASK0_STACK_SIZE
+
 #ifdef SMP
 /****************************************************************************
  *
@@ -47,30 +59,16 @@ testAndSet:
 /****************************************************************************
  *
  ****************************************************************************/
-   .bss
-   .p2align 2
-__abort_stack:
-   .skip ABORT_STACK_SIZE
-__fiq_stack:
-   .skip FIQ_STACK_SIZE
-__stack:
-   .skip TASK0_STACK_SIZE
-
-/****************************************************************************
- *
- ****************************************************************************/
    .text
    .p2align 2
    .global __taskSwitch
 __taskSwitch:
-   push {r0-r12,lr}
    mrs r2, CPSR
-   push {r2}
+   push {r0-r12,lr}
    str sp, [r0]
    mov sp, r1
-   pop {r2}
-   msr CPSR, r2
    pop {r0-r12,lr}
+   msr CPSR, r2
    bx lr
 
 /****************************************************************************
@@ -78,102 +76,23 @@ __taskSwitch:
  ****************************************************************************/
    .text
    .p2align 2
-   .weak _undefinedInstructionVector
-_undefinedInstructionVector:
-   ldr r0, =undefinedInstructionVector_msg
-   bl puts
-   b .
-undefinedInstructionVector_msg:
-   .asciz "undefined instruction exception"
-
-/****************************************************************************
- *
- ****************************************************************************/
-   .text
-   .p2align 2
-   .weak _softwareInterruptVector
-_softwareInterruptVector:
-   ldr r0, =softwareInterruptVector_msg
-   bl puts
-   b .
-softwareInterruptVector_msg:
-   .asciz "software interrupt"
-
-/****************************************************************************
- *
- ****************************************************************************/
-   .text
-   .p2align 2
-   .weak _prefetchAbortVector
-_prefetchAbortVector:
-   ldr r0, =prefetchAbortVector_msg
-   bl puts
-   b .
-prefetchAbortVector_msg:
-   .asciz "prefetch abort exception"
-
-/****************************************************************************
- *
- ****************************************************************************/
-   .text
-   .p2align 2
-   .weak _dataAbortVector
-_dataAbortVector:
-   ldr r0, =dataAbortVector_msg
-   bl puts
-   b .
-dataAbortVector_msg:
-   .asciz "data abort exception"
-
-/****************************************************************************
- *
- ****************************************************************************/
-   .text
-   .p2align 2
-   .weak _irqVector
-_irqVector:
-   ldr r0, =irqVector_msg
-   bl puts
-   b .
-irqVector_msg:
-   .asciz "irq interrupt"
-
-/****************************************************************************
- *
- ****************************************************************************/
-   .text
-   .p2align 2
-__irqVector:
-   sub lr, #4
+__irq:
    msr CPSR, #(CPU_I_BIT | CPU_MODE_SUPERVISOR)
-   push {r0-r12,lr}
+   push {r0-r3,r12,lr}
    msr CPSR, #(CPU_I_BIT | CPU_MODE_IRQ)
-   mov r0, lr
-   mrs r1, SPSR
+   sub r1, lr, #4
+   mrs r0, SPSR
    msr CPSR, #(CPU_I_BIT | CPU_MODE_SUPERVISOR)
    push {r0-r1}
-   bl _irqVector
+   bl _irq
    pop {r0-r1}
    msr CPSR, #(CPU_I_BIT | CPU_MODE_IRQ)
-   mov lr, r0
-   msr SPSR, r1
+   msr SPSR, r0
+   mov lr, r1
    msr CPSR, #(CPU_I_BIT | CPU_MODE_SUPERVISOR)
-   pop {r0-r12,lr}
+   pop {r0-r3,r12,lr}
    msr CPSR, #(CPU_I_BIT | CPU_MODE_IRQ)
    movs pc, lr
-
-/****************************************************************************
- *
- ****************************************************************************/
-   .text
-   .p2align 2
-   .weak _fiqVector
-_fiqVector:
-   ldr r0, =fiqVector_msg
-   bl puts
-   b .
-fiqVector_msg:
-   .asciz "fiq interrupt"
 
 /****************************************************************************
  *
@@ -181,28 +100,29 @@ fiqVector_msg:
    .data
    .p2align 12
 __vector_table:
+   ldr pc, start
+   ldr pc, undefinedInstruction
+   ldr pc, softwareInterrupt
+   ldr pc, prefetchAbort
+   ldr pc, dataAbort
    nop
-   ldr pc, undefinedInstructionVector
-   ldr pc, softwareInterruptVector
-   ldr pc, prefetchAbortVector
-   ldr pc, dataAbortVector
-   nop
-   ldr pc, irqVector
-   ldr pc, fiqVector
+   ldr pc, irq
+   ldr pc, fiq
 
-undefinedInstructionVector:
-   .word _undefinedInstructionVector
-softwareInterruptVector:
-   .word _softwareInterruptVector
-prefetchAbortVector:
-   .word _prefetchAbortVector
-dataAbortVector:
-   .word _dataAbortVector
-irqVector:
-   .word __irqVector
-fiqVector:
-   .word _fiqVector
-__vector_table_end__:
+start:
+   .word _start
+undefinedInstruction:
+   .word _undefinedInstruction
+softwareInterrupt:
+   .word _softwareInterrupt
+prefetchAbort:
+   .word _prefetchAbort
+dataAbort:
+   .word _dataAbort
+irq:
+   .word __irq
+fiq:
+   .word _fiq
 
 /****************************************************************************
  *
@@ -227,8 +147,7 @@ _start:
    ldr sp, =__stack + TASK0_STACK_SIZE
 
    ldr r0, =__vector_table
-   ldr r1, =__vector_table_end__ - __vector_table
-   ldr r2, =__stack
-   ldr r3, =TASK0_STACK_SIZE
+   ldr r1, =__stack
+   ldr r2, =TASK0_STACK_SIZE
    bl main
    bl taskExit

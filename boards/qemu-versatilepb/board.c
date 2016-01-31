@@ -55,12 +55,17 @@ extern unsigned char _binary_fs_data_bin_end[];
 /****************************************************************************
  *
  ****************************************************************************/
+static VIC vic = VIC_CREATE(0x10140000);
+static SIC sic = SIC_CREATE(0x10003000);
+
 static PL011 pl011 = PL011_CREATE
 (
    0x101F1000,
    NULL,
    QUEUE_CREATE_PTR("pl011_rx", 1, 8)
 );
+
+static SP804 sp804 = SP804_CREATE(0x101E2000);
 
 static LAN91C lan91c = LAN91C_CREATE
 (
@@ -69,14 +74,11 @@ static LAN91C lan91c = LAN91C_CREATE
    TASK_HIGH_PRIORITY
 );
 
-static SP804 sp804 = SP804_CREATE(0x101E2000);
-static VIC vic = VIC_CREATE(0x10140000);
-static SIC sic = SIC_CREATE(0x10003000);
-static unsigned long ALIGNED(4096) mmuPage[1024];
 static HistoryData historyData = HISTORY_DATA(10);
 static Task httpTask = TASK_CREATE("httpd", 2048);
-static Task mainTask;
+
 static MMU mmu;
+static Task task0;
 static MemDev memDev;
 static VFS vfs;
 static HTTPServer httpServer;
@@ -129,7 +131,7 @@ static const HTTPCallback HTTP_CALLBACKS[] =
  ****************************************************************************/
 static void taskTick(HWTimer* timer)
 {
-   unsigned long tickClks = sp804.timer.clk / TASK_TICK_HZ;
+   unsigned long tickClks = sp804.timer.clk / TICK_HZ;
    _taskTick(timer->loadValue / tickClks);
    _taskPreempt(true);
 }
@@ -139,6 +141,7 @@ static void taskTick(HWTimer* timer)
  ****************************************************************************/
 void* mmuGetPage(unsigned int count)
 {
+   static unsigned long ALIGNED(4096) mmuPage[1024];
    return mmuPage;
 }
 
@@ -152,7 +155,7 @@ void mmuFreePage(void* page) {}
  ****************************************************************************/
 void taskTimer(unsigned long ticks)
 {
-   unsigned long tickClks = sp804.timer.clk / TASK_TICK_HZ;
+   unsigned long tickClks = sp804.timer.clk / TICK_HZ;
    unsigned long maxTicks = sp804.timer.max / tickClks;
 
    if (ticks > maxTicks)
@@ -181,7 +184,7 @@ void taskWait()
 /****************************************************************************
  *
  ****************************************************************************/
-void _irqVector()
+void _irq()
 {
    vicIRQ(0, &vic);
 }
@@ -189,8 +192,7 @@ void _irqVector()
 /****************************************************************************
  *
  ****************************************************************************/
-int main(void* vectors, unsigned long vectorSize, void* stack,
-         unsigned long stackSize)
+int main(void* vectors, void* stack, unsigned long stackSize)
 {
    struct ip_addr gateway;
    struct ip_addr netmask;
@@ -200,12 +202,12 @@ int main(void* vectors, unsigned long vectorSize, void* stack,
    IP4_ADDR(&netmask, 255, 255, 255, 0);
    IP4_ADDR(&ip, 10, 0, 2, 15);
 
+   taskInit(&task0, "main", TASK_HIGH_PRIORITY, stack, stackSize);
+
    mmuInit(&mmu);
    mmuMap(&mmu, MMU_MODE_KR | MMU_MODE_X | MMU_MODE_C | MMU_MODE_B,
           (void*) 0xFFFF0000, vectors, 1);
    vectorsHigh();
-
-   taskInit(&mainTask, "main", TASK_HIGH_PRIORITY, stack, stackSize);
 
    vicInit(&vic);
    sicInit(&sic);
@@ -223,8 +225,6 @@ int main(void* vectors, unsigned long vectorSize, void* stack,
    lan91cInit(&lan91c, &ip, &netmask, &gateway, true);
    sic.ctrl.addHandler(&sic.ctrl, 25, lan91cIRQ, &lan91c, false, 1);
 
-   tcpip_init(NULL, NULL);
-
    memDevInit(&memDev, _binary_fs_data_bin_start,
               _binary_fs_data_bin_end - _binary_fs_data_bin_start);
    romfsInit(&vfs, &memDev.dev);
@@ -236,11 +236,12 @@ int main(void* vectors, unsigned long vectorSize, void* stack,
    httpServer.index = "index.xhtml";
    taskStart(&httpTask, httpServerFx, &httpServer, TASK_LOW_PRIORITY);
 
+   tcpip_init(NULL, NULL);
+
    puts("AliOS on ARM");
    enableInterrupts();
 
    taskSetData(HISTORY_DATA_ID, &historyData);
-
    shellRun(SHELL_CMDS);
 
    return 0;

@@ -100,7 +100,7 @@ VPATH += ../../drivers/net
 VPATH += ../../drivers/timer
 VPATH += ../../drivers/uart
 INCLUDES += -I../../drivers
-C_FILES += pl011.c sp804.c mem_dev.c vfs.c romfs.c lan91c.c armv7_mmu.c
+C_FILES += armv7_mmu.c pl011.c sp804.c lan91c.c vfs.c mem_dev.c romfs.c
 
 ##############################################################################
 #

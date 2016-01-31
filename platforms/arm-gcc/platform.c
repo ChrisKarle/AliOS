@@ -26,6 +26,7 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include "platform.h"
 
@@ -37,29 +38,27 @@
 /****************************************************************************
  *
  ****************************************************************************/
-void __taskSwitch(void** current, void* next);
+struct
+{
+#ifdef SMP
+   unsigned int smp;
+#endif
+   int flag;
+
+} lock;
 
 /****************************************************************************
  *
  ****************************************************************************/
-static struct
-{
-#ifdef SMP
-   unsigned int state;
-   int interrupts[SMP];
-#else
-   int interrupts[1];
-#endif
-} lock;
+void __taskSwitch(void** current, void* next);
 
 /****************************************************************************
  *
  ****************************************************************************/
 void _kernelLock()
 {
-   lock.interrupts[cpuID()] = true;
 #ifdef SMP
-   testAndSet(&lock.state, 0, 1);
+   testAndSet(&lock.smp, 0, 1);
 #endif
 }
 
@@ -69,7 +68,7 @@ void _kernelLock()
 void _kernelUnlock()
 {
 #ifdef SMP
-   lock.state = 0;
+   lock.smp = 0;
 #endif
 }
 
@@ -78,10 +77,8 @@ void _kernelUnlock()
  ****************************************************************************/
 void kernelLock()
 {
-   lock.interrupts[cpuID()] = disableInterrupts();
-#ifdef SMP
-   testAndSet(&lock.state, 0, 1);
-#endif
+   lock.flag = disableInterrupts();
+   _kernelLock();
 }
 
 /****************************************************************************
@@ -89,10 +86,8 @@ void kernelLock()
  ****************************************************************************/
 void kernelUnlock()
 {
-#ifdef SMP
-   lock.state = 0;
-#endif
-   if (lock.interrupts[cpuID()])
+   _kernelUnlock();
+   if (lock.flag)
       enableInterrupts();
 }
 
@@ -118,12 +113,11 @@ void taskSetup(Task* task, void (*fx)(void*, void*), void* arg1, void* arg2)
    stack[-9] = 0x55555555;
    stack[-10] = 0x44444444;
    stack[-11] = 0x33333333;
-   stack[-12] = 0x22222222;
+   stack[-12] = CPU_I_BIT | CPU_MODE_SUPERVISOR;
    stack[-13] = (uintptr_t) arg2;
    stack[-14] = (uintptr_t) arg1;
-   stack[-15] = CPU_I_BIT | CPU_MODE_SUPERVISOR;
 
-   task->stack.ptr = stack - 15;
+   task->stack.ptr = stack - 14;
 }
 
 #if TASK_STACK_USAGE
@@ -147,7 +141,8 @@ unsigned long taskStackUsage(Task* task)
  ****************************************************************************/
 void _taskEntry(Task* task)
 {
-   kernelUnlock();
+   _kernelUnlock();
+   enableInterrupts();
 }
 
 /****************************************************************************
@@ -181,4 +176,58 @@ void _taskInit(Task* task, void* stackBase, unsigned long stackSize)
    /* cannot use memset here */
    while (stack < sp)
       *stack++ = STACK_MARKER;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void WEAK __attribute__((interrupt("UNDEF"))) _undefinedInstruction()
+{
+   puts("\nundefined instruction");
+   for (;;);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void WEAK __attribute__((interrupt("SWI"))) _softwareInterrupt()
+{
+   puts("\nunexpected software IRQ");
+   for (;;);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void WEAK __attribute__((interrupt("ABORT"))) _prefetchAbort()
+{
+   puts("\nprefetch abort");
+   for (;;);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void WEAK __attribute__((interrupt("ABORT"))) _dataAbort()
+{
+   puts("\ndata abort");
+   for (;;);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void WEAK _irq()
+{
+   puts("\nunexpected IRQ");
+   for (;;);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void WEAK __attribute__((interrupt("FIQ"))) _fiq()
+{
+   puts("\nunexpected FIQ");
+   for (;;);
 }

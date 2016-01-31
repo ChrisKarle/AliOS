@@ -37,7 +37,11 @@
 #define MMU_PAGE_SIZE 4096
 
 /****************************************************************************
- *
+ * X  - executable
+ * KW - kernel writable
+ * KR - kernel readable
+ * C  - cachable
+ * C  - bufferable
  ****************************************************************************/
 #define MMU_MODE_X  0x01
 #define MMU_MODE_KW 0x02

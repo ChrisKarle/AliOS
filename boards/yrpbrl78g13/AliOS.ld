@@ -49,13 +49,14 @@ SECTIONS
       *(.callt)
       *(.option)
       *(.id)
+      *(.plt)
 
    } >rom :misc
 
    .data :
    {
       __data__ = .;
-      *(.data)
+      *(.data*)
       __data_end__ = .;
 
    } >ram AT>rom :data
@@ -65,8 +66,7 @@ SECTIONS
    .text :
    {
       __text__ = .;
-      *(.plt)
-      *(.text)
+      *(.text*)
       __text_end__ = .;
 
    } >rom :text
@@ -74,7 +74,7 @@ SECTIONS
    .rodata MAX(0x2000, .) :
    {
       __rodata__ = .;
-      *(.rodata)
+      *(.rodata*)
       __rodata_end__ = .;
 
    } >rom :rodata
@@ -82,7 +82,7 @@ SECTIONS
    .bss :
    {
       __bss__ = .;
-      *(.bss)
+      *(.bss*)
       *(COMMON)
       __bss_end__ = .;
 

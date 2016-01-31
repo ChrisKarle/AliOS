@@ -33,28 +33,28 @@ SECTIONS
    {
       __text__ = .;
       *(.start)
-      *(.text)
+      *(.text*)
       __text_end__ = .;
    }
 
    .rodata ALIGN(4) :
    {
       __rodata__ = .;
-      *(.rodata)
+      *(.rodata*)
       __rodata_end__ = .;
    }
 
    .data ALIGN(4) :
    {
       __data__ = .;
-      *(.data)
+      *(.data*)
       __data_end__ = .;
    }
 
    .bss ALIGN(4) :
    {
       __bss__ = .;
-      *(.bss)
+      *(.bss*)
       *(COMMON)
       __bss_end__ = .;
    }

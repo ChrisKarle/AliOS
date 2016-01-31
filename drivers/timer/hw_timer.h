@@ -33,12 +33,12 @@
 /****************************************************************************
  *
  ****************************************************************************/
-typedef struct _HWTimer
+typedef struct HWTimer
 {
-   void (*load)(struct _HWTimer*, unsigned long);
-   void (*enable)(struct _HWTimer*, bool);
-   unsigned long (*value)(struct _HWTimer*);
-   void (*callback)(struct _HWTimer*);
+   void (*load)(struct HWTimer*, unsigned long);
+   void (*enable)(struct HWTimer*, bool);
+   unsigned long (*value)(struct HWTimer*);
+   void (*callback)(struct HWTimer*);
 
    bool periodic;
    unsigned long loadValue;

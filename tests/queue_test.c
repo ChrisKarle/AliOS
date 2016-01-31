@@ -68,7 +68,7 @@ static void fxTimer(Timer* _timer)
       }
    }
 
-   timerAdd(_timer, NULL, fxTimer, NULL, 0, rand() % 100);
+   _timerAdd(_timer, NULL, fxTimer, NULL, 0, rand() % 100);
 }
 
 /****************************************************************************

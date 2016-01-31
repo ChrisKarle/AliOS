@@ -202,7 +202,6 @@ int main()
 
    taskSetData(READLINE_DATA_ID, &readlineData);
    taskSetData(HISTORY_DATA_ID, &historyData);
-
    shellRun(SHELL_CMDS);
 
    return 0;
