@@ -43,6 +43,7 @@
  ****************************************************************************/
 #define ICLK 96000000UL
 #define PCLK 48000000UL
+#define DYNAMIC_TICK
 
 /****************************************************************************
  *
@@ -82,7 +83,33 @@ static const ShellCmd SHELL_CMDS[] =
 /****************************************************************************
  *
  ****************************************************************************/
-void taskTimer(unsigned long ticks) {}
+void taskTimer(unsigned long ticks)
+{
+#ifdef DYNAMIC_TICK
+   CMSTR0 = 0x0000;
+
+   if (ticks)
+   {
+      unsigned long factor = PCLK / 128 / 1000;
+
+      if ((ticks * factor) > 0xFFFF)
+         ticks = 0xFFFF / factor;
+
+      if (MSTPCRA & (1 << 15))
+      {
+         MSTPCRA &= ~(1 << 15);
+         CMT0_CMCR = 0x00C2;
+      }
+
+      CMT0_CMCOR = ticks * factor;
+      CMSTR0 = 0x0001;
+   }
+   else
+   {
+      MSTPCRA |= 1 << 15;
+   }
+#endif
+}
 
 /****************************************************************************
  *
@@ -97,7 +124,7 @@ void taskWait()
  ****************************************************************************/
 void IRQ _CMI0()
 {
-   _taskTick(1);
+   _taskTick(CMT0_CMCOR / (PCLK / 128 / 1000));
    _taskPreempt(true);
 }
 
@@ -141,10 +168,12 @@ int main(void* stack, unsigned long size)
 
    libcInit(&uart2.dev);
 
+#ifndef DYNAMIC_TICK
    MSTPCRA &= ~(1 << 15);
-   CMT0_CMCR = 0x0040;
-   CMT0_CMCOR = PCLK / 8 / 1000;
-   CMSTR0 = 0x0001;
+   CMT0_CMCR = 0x00C2;
+   CMT0_CMCOR = PCLK / 128 / 1000;
+   CMSTR0 |= 0x0001;
+#endif
    IPR[0x04] = KERNEL_IPL;
    IER[28 / 8] = (1 << (28 % 8));
 
