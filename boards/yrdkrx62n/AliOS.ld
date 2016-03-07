@@ -31,17 +31,20 @@ MEMORY
    rom : ORIGIN = -512K, LENGTH = 512K
 }
 
+ENTRY(_start)
+
 SECTIONS
 {
    .debugger :
    {
       . += 1K;
+
    } >ram
 
    .bss :
    {
       __bss__ = .;
-      *(.bss)
+      *(.bss*)
       *(B)
       *(B_*)
       *(COMMON)
@@ -52,7 +55,7 @@ SECTIONS
    .data :
    {
       __data__ = .;
-      *(.data)
+      *(.data*)
       *(D)
       *(D_*)
       __data_end__ = .;
@@ -84,5 +87,6 @@ SECTIONS
    .fixed_vectors 0xFFFFFFD0 :
    {
       *(.fixed_vectors)
+
    } >rom
 }

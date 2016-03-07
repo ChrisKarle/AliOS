@@ -47,6 +47,20 @@
 /****************************************************************************
  *
  ****************************************************************************/
+static UART uart2 = UART_CREATE
+(
+   UART2,
+   NULL,
+   QUEUE_CREATE_PTR("uart2_rx", 1, 8)
+);
+
+static ReadlineData readlineData = READLINE_DATA(256);
+static HistoryData historyData = HISTORY_DATA(4);
+static Task task0;
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 static void taskListCmd(int argc, char* argv[])
 {
    taskList();
@@ -68,21 +82,6 @@ static const ShellCmd SHELL_CMDS[] =
 /****************************************************************************
  *
  ****************************************************************************/
-static ReadlineData readlineData = READLINE_DATA(256);
-static HistoryData historyData = HISTORY_DATA(4);
-
-static UART uart2 = UART_CREATE
-(
-   UART2,
-   NULL,
-   QUEUE_CREATE_PTR("uart2_rx", 1, 8)
-);
-
-static Task task;
-
-/****************************************************************************
- *
- ****************************************************************************/
 void taskTimer(unsigned long ticks) {}
 
 /****************************************************************************
@@ -96,10 +95,34 @@ void taskWait()
 /****************************************************************************
  *
  ****************************************************************************/
-void irq28()
+void IRQ _CMI0()
 {
    _taskTick(1);
-   taskPreempt(true);
+   _taskPreempt(true);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void IRQ _ERI2()
+{
+   uartRxIRQ(&uart2);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void IRQ _RXI2()
+{
+   uartRxIRQ(&uart2);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void IRQ _TXI2()
+{
+   uartTxIRQ(&uart2);
 }
 
 /****************************************************************************
@@ -110,7 +133,7 @@ int main(void* stack, unsigned long size)
    /* XTAL: 12MHz -> ICLK: 96Mhz, PCLK: 48Mhz, BCLK: disabled */
    SCKCR = 0x00C30100;
 
-   taskInit(&task, "main", TASK_HIGH_PRIORITY, stack, size);
+   taskInit(&task0, "main", TASK_HIGH_PRIORITY, stack, size);
 
    PFFSCI |= 0x04;
    PORT5ICR |= 0x04;
@@ -128,13 +151,13 @@ int main(void* stack, unsigned long size)
    puts("AliOS on RX");
    enableInterrupts();
 
+   taskSetData(READLINE_DATA_ID, &readlineData);
+   taskSetData(HISTORY_DATA_ID, &historyData);
+
    mutexTest();
    queueTest();
    semaphoreTest();
    timerTest();
-
-   taskSetData(READLINE_DATA_ID, &readlineData);
-   taskSetData(HISTORY_DATA_ID, &historyData);
 
    shellRun(SHELL_CMDS);
 

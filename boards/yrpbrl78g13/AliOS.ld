@@ -71,6 +71,10 @@ SECTIONS
 
    } >rom :text
 
+   /* Please review the mirror window in the data sheet.  Depending on the
+    * chip, the .rodata section could extend past the mirror window.  If that
+    * happens, move this section before the .text section.
+    */
    .rodata MAX(0x2000, .) :
    {
       __rodata__ = .;

@@ -25,6 +25,7 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
+#include <stdint.h>
 #include <string.h>
 #include "platform.h"
 
@@ -36,24 +37,17 @@
 /****************************************************************************
  *
  ****************************************************************************/
+static bool flag = false;
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 void __taskSwitch(void** current, void* next);
 
 /****************************************************************************
  *
  ****************************************************************************/
-static struct
-{
-   bool state;
-
-} lock;
-
-/****************************************************************************
- *
- ****************************************************************************/
-void _kernelLock()
-{
-   lock.state = true;
-}
+void _kernelLock() {}
 
 /****************************************************************************
  *
@@ -65,7 +59,7 @@ void _kernelUnlock() {}
  ****************************************************************************/
 void kernelLock()
 {
-   lock.state = disableInterrupts();
+   flag = disableInterrupts();
 }
 
 /****************************************************************************
@@ -73,7 +67,7 @@ void kernelLock()
  ****************************************************************************/
 void kernelUnlock()
 {
-   if (lock.state)
+   if (flag)
       enableInterrupts();
 }
 
@@ -82,16 +76,15 @@ void kernelUnlock()
  ****************************************************************************/
 void taskSetup(Task* task, void (*fx)(void*, void*), void* arg1, void* arg2)
 {
-   unsigned long* stack = (unsigned long*) task->stack.base +
-                          task->stack.size / 4;
+   uint32_t* stack = (uint32_t*) task->stack.base + task->stack.size / 4;
 
 #if TASK_STACK_USAGE
    memset(task->stack.base, STACK_MARKER, task->stack.size);
 #endif
 
-   stack[-1] = (unsigned long) fx;
-   stack[-2] = 0xFFFFFFFF;
-   stack[-3] = 0xEEEEEEEE;
+   stack[-1] = (uint32_t) fx;
+   stack[-2] = 0x00000000;
+   stack[-3] = 0x00020000;
    stack[-4] = 0xDDDDDDDD;
    stack[-5] = 0xCCCCCCCC;
    stack[-6] = 0xBBBBBBBB;
@@ -100,16 +93,13 @@ void taskSetup(Task* task, void (*fx)(void*, void*), void* arg1, void* arg2)
    stack[-9] = 0x88888888;
    stack[-10] = 0x77777777;
    stack[-11] = 0x66666666;
-   stack[-12] = 0x55555555;
-   stack[-13] = 0x44444444;
-   stack[-14] = 0x33333333;
-   stack[-15] = (unsigned long) arg2;
-   stack[-16] = (unsigned long) arg1;
-   stack[-17] = 0x00000000;
-   stack[-18] = 0x00000000;
-   stack[-19] = 0x00000100;
+   stack[-12] = 0x00000000;
+   stack[-13] = 0x00000000;
+   stack[-14] = 0x00000000;
+   stack[-15] = (uint32_t) arg2;
+   stack[-16] = (uint32_t) arg1;
 
-   task->stack.ptr = stack - 19;
+   task->stack.ptr = stack - 16;
 }
 
 #if TASK_STACK_USAGE
@@ -118,7 +108,7 @@ void taskSetup(Task* task, void (*fx)(void*, void*), void* arg1, void* arg2)
  ****************************************************************************/
 unsigned long taskStackUsage(Task* task)
 {
-   unsigned char* stack = task->stack.base;
+   uint8_t* stack = task->stack.base;
    unsigned long i = 0;
 
    while (stack[i] == STACK_MARKER)
@@ -133,7 +123,7 @@ unsigned long taskStackUsage(Task* task)
  ****************************************************************************/
 void _taskEntry(Task* task)
 {
-   kernelUnlock();
+   enableInterrupts();
 }
 
 /****************************************************************************
@@ -154,8 +144,8 @@ void _taskSwitch(Task* current, Task* next)
  ****************************************************************************/
 void _taskInit(Task* task, void* stackBase, unsigned long stackSize)
 {
-   unsigned char* stack = NULL;
-   unsigned char* sp = NULL;
+   uint8_t* stack = NULL;
+   uint8_t* sp = NULL;
 
    __asm__ __volatile__("mov r0, %0" : "=r" (sp));
 
@@ -167,4 +157,44 @@ void _taskInit(Task* task, void* stackBase, unsigned long stackSize)
    /* cannot use memset here */
    while (stack < sp)
       *stack++ = STACK_MARKER;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void WEAK IRQ _privExeException()
+{
+   for (;;);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void WEAK IRQ _accessException()
+{
+   for (;;);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void WEAK IRQ _undefExeException()
+{
+   for (;;);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void WEAK IRQ _floatingPtException()
+{
+   for (;;);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void WEAK IRQ _nmi()
+{
+   for (;;);
 }

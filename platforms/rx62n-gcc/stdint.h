@@ -39,5 +39,6 @@ typedef signed long int32_t;
 typedef signed long long int64_t;
 
 typedef unsigned long uintptr_t;
+typedef signed long intptr_t;
 
 #endif

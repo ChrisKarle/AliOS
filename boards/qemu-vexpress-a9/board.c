@@ -57,9 +57,9 @@ static HistoryData historyData = HISTORY_DATA(10);
 static MMU mmu;
 
 #ifdef SMP
-static Task task[SMP];
+static Task task0[SMP];
 #else
-static Task task[1];
+static Task task0[1];
 #endif
 
 /****************************************************************************
@@ -175,7 +175,7 @@ void smpMain(void* stack, unsigned long size)
    vectorsHigh();
 
    gicInitSMP(&gic);
-   taskInit(&task[cpuID()], "main+", TASK_LOW_PRIORITY, stack, size);
+   taskInit(&task0[cpuID()], "main+", TASK_LOW_PRIORITY, stack, size);
    enableInterrupts();
 
    for (;;)
@@ -193,7 +193,7 @@ int main(void* vectors, void* stack, unsigned long stackSize)
           (void*) 0xFFFF0000, vectors, 1);
    vectorsHigh();
 
-   taskInit(&task[cpuID()], "main", TASK_HIGH_PRIORITY, stack, stackSize);
+   taskInit(&task0[cpuID()], "main", TASK_HIGH_PRIORITY, stack, stackSize);
 
    gicInit(&gic);
 

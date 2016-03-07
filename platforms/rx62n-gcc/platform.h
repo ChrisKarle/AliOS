@@ -31,15 +31,15 @@
 /****************************************************************************
  *
  ****************************************************************************/
-#define MSTPCRA    (*(volatile unsigned long*) 0x00080010)
-#define MSTPCRB    (*(volatile unsigned long*) 0x00080014)
-#define MSTPCRC    (*(volatile unsigned long*) 0x00080018)
-#define SCKCR      (*(volatile unsigned long*) 0x00080020)
-#define BCKCR      (*(volatile unsigned char*) 0x00080030)
+#define MSTPCRA    (*(volatile unsigned long*)  0x00080010)
+#define MSTPCRB    (*(volatile unsigned long*)  0x00080014)
+#define MSTPCRC    (*(volatile unsigned long*)  0x00080018)
+#define SCKCR      (*(volatile unsigned long*)  0x00080020)
+#define BCKCR      (*(volatile unsigned char*)  0x00080030)
 #define OSTDCR     (*(volatile unsigned short*) 0x00080040)
-#define IR         ((volatile unsigned char*) 0x00087000)
-#define IER        ((volatile unsigned char*) 0x00087200)
-#define IPR        ((volatile unsigned char*) 0x00087300)
+#define IR         ((volatile unsigned char*)   0x00087000)
+#define IER        ((volatile unsigned char*)   0x00087200)
+#define IPR        ((volatile unsigned char*)   0x00087300)
 #define CMSTR0     (*(volatile unsigned short*) 0x00088000)
 #define CMT0_CMCR  (*(volatile unsigned short*) 0x00088002)
 #define CMT0_CMCNT (*(volatile unsigned short*) 0x00088004)
@@ -54,12 +54,12 @@
 #define CMT3_CMCR  (*(volatile unsigned short*) 0x00088018)
 #define CMT3_CMCNT (*(volatile unsigned short*) 0x0008801A)
 #define CMT3_CMCOR (*(volatile unsigned short*) 0x0008801C)
-#define PORT5DDR   (*(volatile unsigned char*) 0x0008C005)
-#define PORT5DR    (*(volatile unsigned char*) 0x0008C025)
-#define PORT5      (*(volatile unsigned char*) 0x0008C045)
-#define PORT5ICR   (*(volatile unsigned char*) 0x0008C065)
-#define PFFSCI     (*(volatile unsigned char*) 0x0008C10F)
-#define SUBOSCCR   (*(volatile unsigned char*) 0x0008C28A)
+#define PORT5DDR   (*(volatile unsigned char*)  0x0008C005)
+#define PORT5DR    (*(volatile unsigned char*)  0x0008C025)
+#define PORT5      (*(volatile unsigned char*)  0x0008C045)
+#define PORT5ICR   (*(volatile unsigned char*)  0x0008C065)
+#define PFFSCI     (*(volatile unsigned char*)  0x0008C10F)
+#define SUBOSCCR   (*(volatile unsigned char*)  0x0008C28A)
 
 /****************************************************************************
  *
@@ -72,7 +72,7 @@
  *
  ****************************************************************************/
 #ifndef INTERRUPT_STACK_SIZE
-#define INTERRUPT_STACK_SIZE 128
+#define INTERRUPT_STACK_SIZE 512
 #endif
 
 /****************************************************************************
@@ -87,6 +87,7 @@
  ****************************************************************************/
 #define NORETURN __attribute__((noreturn))
 #define WEAK __attribute__((weak))
+#define IRQ __attribute__((interrupt))
 
 /****************************************************************************
  *

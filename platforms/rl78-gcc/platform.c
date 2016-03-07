@@ -37,7 +37,7 @@
 /****************************************************************************
  *
  ****************************************************************************/
-static int flag = 0;
+static bool flag = false;
 
 /****************************************************************************
  *
@@ -119,7 +119,7 @@ void taskSetup(Task* task, void (*fx)(void*, void*), void* arg1, void* arg2)
  ****************************************************************************/
 unsigned long taskStackUsage(Task* task)
 {
-   unsigned char* stack = task->stack.base;
+   uint8_t* stack = task->stack.base;
    unsigned long i = 0;
 
    while (stack[i] == STACK_MARKER)
@@ -152,8 +152,8 @@ void _taskSwitch(Task* current, Task* next)
  ****************************************************************************/
 void _taskInit(Task* task, void* stackBase, unsigned long stackSize)
 {
-   unsigned char* sp = *(unsigned char**) 0xFFF8;
-   unsigned char* stack = NULL;
+   uint8_t* sp = *(unsigned char**) 0xFFF8;
+   uint8_t* stack = NULL;
 
    task->stack.base = stackBase;
    task->stack.size = stackSize;

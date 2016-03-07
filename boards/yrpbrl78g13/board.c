@@ -164,9 +164,10 @@ int main(void* stack, unsigned int stackSize)
 {
    CMC = 0;
    delay(10);
-
    PER0 = 0x28;
    delay(10);
+
+   taskInit(&task0, "main", TASK_LOW_PRIORITY, stack, stackSize);
 
    P7 &= ~0x80;
    PM7 &= ~0x80;
@@ -183,8 +184,6 @@ int main(void* stack, unsigned int stackSize)
    PER0 |= 0x80;
    IF1H &= ~0x04;
    MK1H &= ~0x04;
-
-   taskInit(&task0, "main", TASK_LOW_PRIORITY, stack, stackSize);
 
    enableInterrupts();
 

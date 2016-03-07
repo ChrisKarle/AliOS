@@ -31,6 +31,6 @@
 #define true (!false)
 #define false 0
 
-typedef int bool;
+typedef char bool;
 
 #endif

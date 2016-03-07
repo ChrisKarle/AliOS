@@ -639,7 +639,6 @@ bool _queuePush(Queue* queue, bool tail, const void* src);
  ****************************************************************************/
 bool queuePush(Queue* queue, bool tail, const void* src, unsigned long ticks);
 
-
 /****************************************************************************
  * Function: _queuePop
  *    - Removes an element from a queue.

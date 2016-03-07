@@ -31,22 +31,23 @@
 /****************************************************************************
  *
  ****************************************************************************/
-#define MUTEX_TEST1_STACK_SIZE     1024
-#define MUTEX_TEST2_STACK_SIZE     1024
-#define QUEUE_TEST1_STACK_SIZE     1024
-#define QUEUE_TEST2_STACK_SIZE     1024
-#define SEMAPHORE_TEST1_STACK_SIZE 1024
-#define SEMAPHORE_TEST2_STACK_SIZE 1024
-#define SEMAPHORE_TEST3_STACK_SIZE 1024
-#define TIMER_TEST1_STACK_SIZE     1024
-#define TIMER_TEST2_STACK_SIZE     1024
+#define MUTEX_TEST1_STACK_SIZE     512
+#define MUTEX_TEST2_STACK_SIZE     512
+#define QUEUE_TEST1_STACK_SIZE     512
+#define QUEUE_TEST2_STACK_SIZE     512
+#define SEMAPHORE_TEST1_STACK_SIZE 512
+#define SEMAPHORE_TEST2_STACK_SIZE 512
+#define SEMAPHORE_TEST3_STACK_SIZE 512
+#define TIMER_TEST1_STACK_SIZE     512
+#define TIMER_TEST2_STACK_SIZE     512
 
 /****************************************************************************
  * Note: Task preemption is rarely needed.
  ****************************************************************************/
-#define TASK_PREEMPTION  0
-#define TASK_LIST        1
-#define TASK_STACK_USAGE 1
+#define TASK_PREEMPTION   0
+#define TASK_LIST         1
+#define TASK_STACK_USAGE  1
+#define TASK_NUM_TASKDATA 2
 
 /****************************************************************************
  *
@@ -54,20 +55,6 @@
 #define TASK_HIGH_PRIORITY  0
 #define TASK_LOW_PRIORITY   1
 #define TASK_NUM_PRIORITIES 2
-
-/****************************************************************************
- *
- ****************************************************************************/
-#define TASK_NUM_TASKDATA 2
-
-/****************************************************************************
- *
- ****************************************************************************/
-#if TASK_PREEMPTION
-#define taskPreempt(f) _taskPreempt(f)
-#else
-#define taskPreempt(f)
-#endif
 
 /****************************************************************************
  *

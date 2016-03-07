@@ -51,18 +51,6 @@ all: $(ELF_FILE)
 ##############################################################################
 #
 ##############################################################################
-.PHONY: run debug
-
-#run: $(BIN_FILE)
-#	qemu-system-arm $(QEMU_ARGS)
-
-debug: $(ELF_FILE)
-	$(CROSS_COMPILE)gdb -ex "target sim" -ex "load $(ELF_FILE)" \
-	$(ELF_FILE)
-
-##############################################################################
-#
-##############################################################################
 C_FLAGS = -Wall -Wno-main -Os -nostdinc -mcpu=g13 -mmul=g13
 LD_FLAGS = -nostdlib -Wl,-loptc,-lgcc -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I$(TOOLCHAIN_PATH)/rl78-elf/optlibinc -I.
@@ -94,9 +82,11 @@ OBJ_FILES += $(S_FILES:%.S=%.o)
 DEP_FILES = $(C_FILES:%.c=%.d)
 DEP_FILES += $(S_FILES:%.S=%.d)
 
+$(HEX_FILE) : $(ELF_FILE)
+	$(CROSS_COMPILE)objcopy -O ihex $(ELF_FILE) $(HEX_FILE)
+
 $(ELF_FILE): $(OBJ_FILES) $(LD_FILE)
 	$(CROSS_COMPILE)gcc -o $@ $(OBJ_FILES) $(LD_FLAGS)
-	$(CROSS_COMPILE)objcopy -O ihex $(ELF_FILE) $(HEX_FILE)
 
 %.o: %.c
 	$(CROSS_COMPILE)gcc $(C_FLAGS) $(INCLUDES) -M -o $*.d $<

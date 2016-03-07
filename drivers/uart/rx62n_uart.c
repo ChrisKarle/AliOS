@@ -35,14 +35,14 @@
  ****************************************************************************/
 #define io ((IO*) 0x00088240)
 #define SET_IPR(uart, s) do { IPR[0x80 + uart->id] = s; } while (0)
-#define SET_IER(uart, n, s)                      \
-   do                                            \
-   {                                             \
-      unsigned int __i = 214 + 4 * uart->id + n; \
-      if (s)                                     \
-         IER[__i / 8] |= (1 << (__i % 8));       \
-      else                                       \
-         IER[__i / 8] &= ~(1 << (__i % 8));      \
+#define SET_IER(uart, n, s)                    \
+   do                                          \
+   {                                           \
+      unsigned int i = 214 + 4 * uart->id + n; \
+      if (s)                                   \
+         IER[i / 8] |= (1 << (i % 8));         \
+      else                                     \
+         IER[i / 8] &= ~(1 << (i % 8));        \
    } while (0)
 
 /****************************************************************************
@@ -60,36 +60,6 @@ typedef volatile struct
    unsigned char semr;
 
 } PACK_STRUCT_STRUCT IO;
-
-/****************************************************************************
- *
- ****************************************************************************/
-static UART* _uart[7] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL};
-
-/****************************************************************************
- *
- ****************************************************************************/
-static void uartTxIRQ(UART* uart)
-{
-   unsigned char c;
-
-   if (_queuePop(uart->queue.tx, true, false, &c))
-      io[uart->id].tdr = c;
-   else
-      SET_IER(uart, 2, false);
-
-   taskPreempt(false);
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-static void uartRxIRQ(UART* uart)
-{
-   unsigned char c = io[uart->id].rdr;
-   _queuePush(uart->queue.rx, true, &c);
-   taskPreempt(false);
-}
 
 /****************************************************************************
  *
@@ -158,6 +128,9 @@ static int rx(CharDev* dev, bool blocking)
       }
    }
 
+   if (io[uart->id].ssr & 0x38)
+      io[uart->id].ssr &= ~0x38;
+
    if (c == EOF)
    {
       if (blocking)
@@ -173,18 +146,36 @@ static int rx(CharDev* dev, bool blocking)
 /****************************************************************************
  *
  ****************************************************************************/
-void irq215() { uartRxIRQ(_uart[0]); }
-void irq216() { uartTxIRQ(_uart[0]); }
-void irq219() { uartRxIRQ(_uart[1]); }
-void irq220() { uartTxIRQ(_uart[1]); }
-void irq223() { uartRxIRQ(_uart[2]); }
-void irq224() { uartTxIRQ(_uart[2]); }
-void irq227() { uartRxIRQ(_uart[3]); }
-void irq228() { uartTxIRQ(_uart[3]); }
-void irq235() { uartRxIRQ(_uart[5]); }
-void irq236() { uartTxIRQ(_uart[5]); }
-void irq239() { uartRxIRQ(_uart[6]); }
-void irq240() { uartTxIRQ(_uart[6]); }
+void uartTxIRQ(UART* uart)
+{
+   unsigned char c;
+
+   if (_queuePop(uart->queue.tx, true, false, &c))
+   {
+      io[uart->id].tdr = c;
+      _taskPreempt(false);
+   }
+   else
+   {
+      SET_IER(uart, 2, false);
+   }
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void uartRxIRQ(UART* uart)
+{
+   if (io[uart->id].ssr & 0x38)
+      io[uart->id].ssr &= ~0x38;
+
+   if (io[uart->id].ssr & 0x40)
+   {
+      unsigned char c = io[uart->id].rdr;
+      _queuePush(uart->queue.rx, true, &c);
+      _taskPreempt(false);
+   }
+}
 
 /****************************************************************************
  *
@@ -192,8 +183,6 @@ void irq240() { uartTxIRQ(_uart[6]); }
 void uartInit(UART* uart, unsigned long clk, unsigned long baud, int dps)
 {
    unsigned long divisor = 16;
-
-   _uart[uart->id] = uart;
 
    MSTPCRB &= ~(1 << (31 - uart->id));
 
@@ -218,10 +207,11 @@ void uartInit(UART* uart, unsigned long clk, unsigned long baud, int dps)
 
    SET_IPR(uart, KERNEL_IPL);
 
-   SET_IER(uart, 0, false);
-
    if (uart->queue.rx != NULL)
+   {
+      SET_IER(uart, 0, true);
       SET_IER(uart, 1, true);
+   }
 
    SET_IER(uart, 2, false);
    SET_IER(uart, 3, false);

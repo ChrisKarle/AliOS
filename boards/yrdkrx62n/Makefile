@@ -50,7 +50,16 @@ all: $(ELF_FILE)
 ##############################################################################
 #
 ##############################################################################
-C_FLAGS = -Wall -Wno-main -Wno-address -Os -mcpu=rx600 -nostdinc
+.PHONY: debug
+
+debug: $(ELF_FILE)
+	$(CROSS_COMPILE)gdb $(ELF_FILE)
+
+##############################################################################
+#
+##############################################################################
+#C_FLAGS = -g -Wall -Wno-main -Wno-address -mcpu=rx600 -nostdinc
+C_FLAGS = -Os -Wall -Wno-main -Wno-address -mcpu=rx600 -nostdinc
 LD_FLAGS = -nostdlib -Wl,-loptc -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I$(TOOLCHAIN_PATH)/rx-elf/optlibinc -I.
 C_FILES = board.c
@@ -59,18 +68,16 @@ S_FILES =
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../platforms/rx62n-gcc
-INCLUDES += -I../../platforms/rx62n-gcc
-C_FILES += platform.c libc_glue.c
-S_FILES += platform_asm.S
+include ../../platforms/rx62n-gcc/Makefile.inc
 
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../kernel
-INCLUDES += -I../../kernel
-C_FILES += kernel.c
+include ../../kernel/Makefile.inc
 
+##############################################################################
+#
+##############################################################################
 ##############################################################################
 #
 ##############################################################################
@@ -81,17 +88,14 @@ C_FILES += rx62n_uart.c
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../extras/readline
-VPATH += ../../extras/shell
-INCLUDES += -I../../extras
-C_FILES += readline.c shell.c
+include ../../extras/Makefile.inc
+include ../../extras/readline/Makefile.inc
+include ../../extras/shell/Makefile.inc
 
 ##############################################################################
 #
 ##############################################################################
-VPATH += ../../tests
-INCLUDES += -I../../tests
-C_FILES += timer_test.c queue_test.c semaphore_test.c mutex_test.c
+include ../../tests/Makefile.inc
 
 ##############################################################################
 #

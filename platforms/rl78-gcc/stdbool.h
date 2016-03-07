@@ -28,9 +28,9 @@
 #ifndef __bool_true_false_are_defined
 #define __bool_true_false_are_defined
 
-#define true (!false)
 #define false 0
+#define true (!false)
 
-typedef int bool;
+typedef char bool;
 
 #endif
