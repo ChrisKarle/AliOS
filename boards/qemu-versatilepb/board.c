@@ -126,6 +126,7 @@ static const HTTPCallback HTTP_CALLBACKS[] =
 static void taskTick(HWTimer* timer)
 {
    unsigned long tickClks = sp804.timer.clk / TASK_TICK_HZ;
+   sys_tick(timer->loadValue / tickClks);
    _taskTick(timer->loadValue / tickClks);
    _taskPreempt(true);
 }
