@@ -179,7 +179,7 @@ void smpMain(void* stack, unsigned long size)
    enableInterrupts();
 
    for (;;)
-      taskSleep(TICK_HZ);
+      taskSleep(TASK_TICK_HZ);
 }
 #endif
 
@@ -205,7 +205,7 @@ int main(void* vectors, void* stack, unsigned long stackSize)
    gic.ctrl.addHandler(&gic.ctrl, 34, sp804IRQ, &sp804, true, 1 << cpuID());
    sp804.timer.callback = taskTick;
    sp804.timer.periodic = true;
-   sp804.timer.load(&sp804.timer, sp804.timer.clk / TICK_HZ);
+   sp804.timer.load(&sp804.timer, sp804.timer.clk / TASK_TICK_HZ);
    sp804.timer.enable(&sp804.timer, true);
 
 #ifdef SMP

@@ -41,7 +41,7 @@
  ****************************************************************************/
 #define TCPIP_THREAD_NAME      "tcp/ip"
 #define TCPIP_THREAD_STACKSIZE 2048
-#define TCPIP_THREAD_PRIO      0
+#define TCPIP_THREAD_PRIO      TASK_HIGH_PRIORITY
 #define TCPIP_MBOX_SIZE        8
 #define TCP_MSS                (1500 - 40)
 
@@ -71,7 +71,7 @@
 /****************************************************************************
  *
  ****************************************************************************/
-#define LWIP_PLATFORM_DIAG(x) do { printf x; } while (0)
+#define LWIP_PLATFORM_DIAG(x) printf x
 #define LWIP_PLATFORM_ASSERT(x)
 
 /****************************************************************************

@@ -27,9 +27,10 @@
  ****************************************************************************/
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "lan91c.h"
 #include "lwip/pbuf.h"
-#include "lwip/tcpip.h"
 #include "netif/etharp.h"
 
 /****************************************************************************
@@ -73,7 +74,7 @@
 /****************************************************************************
  *
  ****************************************************************************/
-static void mmiTx(uint32_t value, unsigned int count)
+static void miiTx(uint32_t value, unsigned int count)
 {
    unsigned int i;
 
@@ -96,7 +97,7 @@ static void mmiTx(uint32_t value, unsigned int count)
 /****************************************************************************
  *
  ****************************************************************************/
-static uint32_t mmiRx(unsigned int count)
+static uint32_t miiRx(unsigned int count)
 {
    uint32_t value = 0;
    unsigned int i;
@@ -114,27 +115,6 @@ static uint32_t mmiRx(unsigned int count)
 
    return value;
 }
-
-/****************************************************************************
- *
- ****************************************************************************/
-static void mmiWrite(uint8_t phy, uint8_t addr, uint16_t value)
-{
-   mmiTx(0xFFFFFFFF, 32);
-   mmiTx(0x50020000 | ((phy & 0x1F) << 17) | ((addr & 0x1F) << 12) | value,
-         32);
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-static uint16_t mmiRead(uint8_t phy, uint8_t addr)
-{
-   mmiTx(0xFFFFFFFF, 32);
-   mmiTx(0x60020000 | ((phy & 0x1F) << 17) | ((addr & 0x1F) << 12), 16);
-   return (uint16_t) mmiRx(16);
-   return 0;
-}
 #endif
 
 /****************************************************************************
@@ -145,22 +125,20 @@ static err_t lan91cTx(struct netif* netif, struct pbuf* pbuf)
    LAN91C* lan91c = netif->state;
    struct pbuf* q = NULL;
 
-   mutexLock(lan91c->lock, -1);
-
    B2_MSK(lan91c) &= ~0x01;
    B2_MMUCR(lan91c) = 1 << 5; /* allocate TX buffer */
+
    while ((B2_IST(lan91c) & 0x08) == 0)
    {
       if (B2_ARR(lan91c) & 0x80)
       {
          B2_MSK(lan91c) |= 0x01;
-         mutexUnlock(lan91c->lock);
-         taskSleep(1);
-         mutexLock(lan91c->lock, -1);
+         taskYield();
          B2_MSK(lan91c) &= ~0x01;
          B2_MMUCR(lan91c) = 1 << 5;
       }
    }
+
    B2_MSK(lan91c) |= 0x01;
 
    B2_PNR(lan91c) = B2_ARR(lan91c);
@@ -207,68 +185,75 @@ static err_t lan91cTx(struct netif* netif, struct pbuf* pbuf)
    B2_MMUCR(lan91c) = 6 << 5;
    B2_MSK(lan91c) |= 0x01;
 
-   mutexUnlock(lan91c->lock);
-
    return ERR_OK;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void lan91cRx(void* arg)
+static void lan91cRx(void* state)
 {
-   LAN91C* lan91c = arg;
+   LAN91C* lan91c = state;
+   struct pbuf* pbuf = NULL;
+   uint8_t pkt;
+   uint16_t length;
+   uintptr_t payload;
+   uint16_t i;
 
-   for (;;)
+   if (!queuePop(lan91c->rxPacket, true, false, &pkt, 0))
+      return;
+
+   B2_PNR(lan91c) = pkt;
+   B2_PTR(lan91c) = 2;
+   length = B2_DATA16n(lan91c)[0];
+   B2_PTR(lan91c) = length - 2;
+
+   if (B2_DATA16n(lan91c)[0] & 0x2000)
+      length++;
+
+   B2_PTR(lan91c) = 0x4004;
+   length -= 6;
+
+   pbuf = pbuf_alloc(PBUF_RAW, length, PBUF_RAM);
+   payload = (uintptr_t) pbuf->payload;
+
+   for (i = 0; i < length / 4; i++)
    {
-      struct pbuf* pbuf = NULL;
-      uint8_t pkt;
-      uint16_t length;
-      uintptr_t payload;
-      uint16_t i;
+      *(uint32_t*) payload = B2_DATA32(lan91c);
+      payload += 4;
+   }
 
-      queuePop(lan91c->rxQueue, true, false, &pkt, -1);
+   if (length & 2)
+   {
+      *(uint16_t*) payload = B2_DATA16n(lan91c)[0];
+      payload += 2;
+   }
 
-      mutexLock(lan91c->lock, -1);
+   if (length & 1)
+      *(uint8_t*) payload = B2_DATA8n(lan91c)[0];
 
-      B2_PNR(lan91c) = pkt;
-      B2_PTR(lan91c) = 2;
-      length = B2_DATA16n(lan91c)[0];
-      B2_PTR(lan91c) = length - 2;
+   B2_MSK(lan91c) &= ~0x01;
+   B2_MMUCR(lan91c) = 5 << 5;
+   while (B2_MMUCR(lan91c) & 0x0001);
+   B2_MSK(lan91c) |= 0x01;
 
-      if (B2_DATA16n(lan91c)[0] & 0x2000)
-         length++;
+   if (lan91c->netif->input(pbuf, lan91c->netif) != ERR_OK)
+      pbuf_free(pbuf);
+}
 
-      B2_PTR(lan91c) = 0x4004;
-      length -= 6;
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void linkChange(void* state)
+{
+   LAN91C* lan91c = state;
 
-      pbuf = pbuf_alloc(PBUF_RAW, length, PBUF_RAM);
-      payload = (uintptr_t) pbuf->payload;
+   netif_set_link_up(lan91c->netif);
 
-      for (i = 0; i < length / 4; i++)
-      {
-         *(uint32_t*) payload = B2_DATA32(lan91c);
-         payload += 4;
-      }
-
-      if (length & 2)
-      {
-         *(uint16_t*) payload = B2_DATA16n(lan91c)[0];
-         payload += 2;
-      }
-
-      if (length & 1)
-         *(uint8_t*) payload = B2_DATA8n(lan91c)[0];
-
-      B2_MSK(lan91c) &= ~0x01;
-      B2_MMUCR(lan91c) = 5 << 5;
-      while (B2_MMUCR(lan91c) & 0x0001);
-      B2_MSK(lan91c) |= 0x01;
-
-      mutexUnlock(lan91c->lock);
-
-      if (lan91c->netif.input(pbuf, &lan91c->netif) != ERR_OK)
-         pbuf_free(pbuf);
+   if ((lan91c->netif->ip_addr.addr == 0) &&
+       ((lan91c->netif->flags & NETIF_FLAG_DHCP) == 0))
+   {
+      dhcp_start(lan91c->netif);
    }
 }
 
@@ -294,11 +279,6 @@ static err_t _lan91cInit(struct netif* netif)
    SET_BSR(lan91c, 2);
    B2_MSK(lan91c) |= 0x03; /* TX,RX INT */
 
-   netif->flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP |
-                  NETIF_FLAG_LINK_UP | NETIF_FLAG_UP;
-
-   taskStart(lan91c->rxTask, lan91cRx, lan91c, lan91c->priority);
-
    return ERR_OK;
 }
 
@@ -315,8 +295,12 @@ void lan91cIRQ(unsigned int n, void* _lan91c)
    if (B2_IST(lan91c) & 0x01)
    {
       uint8_t pkt = B2_RXFIFO(lan91c) & ~0x80;
-      _queuePush(lan91c->rxQueue, true, &pkt);
+
+      _queuePush(lan91c->rxPacket, true, &pkt);
+      tcpip_trycallback(lan91c->ethRxMsg);
+
       B2_MMUCR(lan91c) = 3 << 5;
+
       _taskPreempt(false);
    }
 }
@@ -324,29 +308,65 @@ void lan91cIRQ(unsigned int n, void* _lan91c)
 /****************************************************************************
  *
  ****************************************************************************/
-void lan91cInit(LAN91C* lan91c, struct ip_addr* ip, struct ip_addr* netmask,
-                struct ip_addr* gateway, bool setDefault)
+void lan91cInit(LAN91C* lan91c, ip_addr_t* _ip, ip_addr_t* _netmask,
+                ip_addr_t* _gateway, bool setDefault)
 {
-   lan91c->netif.mtu = 1500;
-   lan91c->netif.name[0] = 'i';
-   lan91c->netif.name[1] = 'f';
-   lan91c->netif.num = 0;
+   static int num = 0;
+   ip_addr_t ip;
+   ip_addr_t netmask;
+   ip_addr_t gateway;
+
+   if (_ip != NULL)
+      ip.addr = _ip->addr;
+   else
+      ip.addr = 0x00000000;
+
+   if (_netmask != NULL)
+      netmask.addr = _netmask->addr;
+   else
+      netmask.addr = 0xFFFFFFFE;
+
+   if (_gateway != NULL)
+      gateway.addr = _gateway->addr;
+   else
+      gateway.addr = (ip.addr & netmask.addr) + 1;
+
+   lan91c->netif = malloc(sizeof(struct netif));
+   memset(lan91c->netif, 0, sizeof(struct netif));
+
+   lan91c->netif->mtu = 1500;
+   lan91c->netif->name[0] = 'l';
+   lan91c->netif->name[1] = 'n';
+   lan91c->netif->num = num++;
 
    SET_BSR(lan91c, 1);
-   lan91c->netif.hwaddr_len = ETHARP_HWADDR_LEN;
-   lan91c->netif.hwaddr[0] = B1_IARn(lan91c)[0];
-   lan91c->netif.hwaddr[1] = B1_IARn(lan91c)[1];
-   lan91c->netif.hwaddr[2] = B1_IARn(lan91c)[2];
-   lan91c->netif.hwaddr[3] = B1_IARn(lan91c)[3];
-   lan91c->netif.hwaddr[4] = B1_IARn(lan91c)[4];
-   lan91c->netif.hwaddr[5] = B1_IARn(lan91c)[5];
+   lan91c->netif->hwaddr_len = ETHARP_HWADDR_LEN;
+   lan91c->netif->hwaddr[0] = B1_IARn(lan91c)[0];
+   lan91c->netif->hwaddr[1] = B1_IARn(lan91c)[1];
+   lan91c->netif->hwaddr[2] = B1_IARn(lan91c)[2];
+   lan91c->netif->hwaddr[3] = B1_IARn(lan91c)[3];
+   lan91c->netif->hwaddr[4] = B1_IARn(lan91c)[4];
+   lan91c->netif->hwaddr[5] = B1_IARn(lan91c)[5];
 
-   lan91c->netif.output = etharp_output;
-   lan91c->netif.linkoutput = lan91cTx;
+   lan91c->netif->output = etharp_output;
+   lan91c->netif->linkoutput = lan91cTx;
 
-   netif_add(&lan91c->netif, ip, netmask, gateway, lan91c, _lan91cInit,
-             tcpip_input);
+   lan91c->linkChangeMsg = tcpip_callbackmsg_new(linkChange, lan91c);
+   lan91c->ethRxMsg = tcpip_callbackmsg_new(lan91cRx, lan91c);
+
+   /* Since we are using the tcp/ip thread for input, we can just use the real
+    * input function.
+    */
+   netif_add(lan91c->netif, &ip, &netmask, &gateway, lan91c, _lan91cInit,
+             ethernet_input);
+   //netif_add(lan91c->netif, &ip, &netmask, &gateway, lan91c, _lan91cInit,
+   //          tcpip_input);
+
+   lan91c->netif->flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP |
+                          NETIF_FLAG_UP;
 
    if (setDefault)
-      netif_set_default(&lan91c->netif);
+      netif_set_default(lan91c->netif);
+
+   tcpip_trycallback(lan91c->linkChangeMsg);
 }

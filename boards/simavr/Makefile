@@ -104,22 +104,25 @@ DEP_FILES = $(C_FILES:%.c=%.d)
 DEP_FILES += $(S_FILES:%.S=%.d)
 
 $(ELF_FILE): $(OBJ_FILES)
-	$(CROSS_COMPILE)gcc -o $@ $(OBJ_FILES) $(LD_FLAGS)
+	@echo -e "\tLD\t$@"
+	@$(CROSS_COMPILE)gcc -o $@ $(OBJ_FILES) $(LD_FLAGS)
 
 %.o: %.c
-	$(CROSS_COMPILE)gcc $(C_FLAGS) $(INCLUDES) -M -o $*.d $<
-	$(CROSS_COMPILE)gcc $(C_FLAGS) $(INCLUDES) -c -o $@ $<
+	@echo -e "\tCC\t$@"
+	@$(CROSS_COMPILE)gcc $(C_FLAGS) $(INCLUDES) -M -o $*.d $<
+	@$(CROSS_COMPILE)gcc $(C_FLAGS) $(INCLUDES) -c -o $@ $<
 
 %.o: %.S
-	$(CROSS_COMPILE)gcc -D__ASM__ $(C_FLAGS) $(INCLUDES) -M -o $*.d $<
-	$(CROSS_COMPILE)gcc -D__ASM__ $(C_FLAGS) $(INCLUDES) -c -o $@ $<
+	@echo -e "\tAS\t$@"
+	@$(CROSS_COMPILE)gcc -D__ASM__ $(C_FLAGS) $(INCLUDES) -M -o $*.d $<
+	@$(CROSS_COMPILE)gcc -D__ASM__ $(C_FLAGS) $(INCLUDES) -c -o $@ $<
 
 .PHONY: clean obj_clean dep_clean
 clean: obj_clean dep_clean simavr_clean
-	rm -f $(ELF_FILE) $(MAP_FILE)
+	@rm -f $(ELF_FILE) $(MAP_FILE)
 obj_clean:
-	rm -f $(OBJ_FILES)
+	@rm -f $(OBJ_FILES)
 dep_clean:
-	rm -f $(DEP_FILES)
+	@rm -f $(DEP_FILES)
 
 -include $(DEP_FILES)

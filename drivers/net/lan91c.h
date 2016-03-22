@@ -30,18 +30,18 @@
 
 #include "kernel.h"
 #include "lwip/netif.h"
+#include "lwip/tcpip.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-#define LAN91C_CREATE(base, rxTask, priority) \
-{                                             \
-   {},                                        \
-   base,                                      \
-   rxTask,                                    \
-   priority,                                  \
-   QUEUE_CREATE_PTR("lan91c", 1, 4),          \
-   MUTEX_CREATE_PTR("lan91c")                 \
+#define LAN91C_CREATE(base)            \
+{                                      \
+   base,                               \
+   NULL,                               \
+   NULL,                               \
+   NULL,                               \
+   QUEUE_CREATE_PTR("net91c_rx", 1, 4) \
 }
 
 /****************************************************************************
@@ -49,12 +49,11 @@
  ****************************************************************************/
 typedef struct
 {
-   struct netif netif;
    unsigned long base;
-   Task* rxTask;
-   unsigned char priority;
-   Queue* rxQueue;
-   Mutex* lock;
+   struct netif* netif;
+   struct tcpip_callback_msg* linkChangeMsg;
+   struct tcpip_callback_msg* ethRxMsg;
+   Queue* rxPacket;
 
 } LAN91C;
 
@@ -66,7 +65,7 @@ void lan91cIRQ(unsigned int n, void* lan91c);
 /****************************************************************************
  *
  ****************************************************************************/
-void lan91cInit(LAN91C* lan91c, struct ip_addr* ip, struct ip_addr* netmask,
-                struct ip_addr* gateway, bool setDefault);
+void lan91cInit(LAN91C* lan91c, ip_addr_t* ip, ip_addr_t* netmask,
+                ip_addr_t* gateway, bool setDefault);
 
 #endif

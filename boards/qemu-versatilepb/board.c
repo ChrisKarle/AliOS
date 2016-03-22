@@ -66,13 +66,7 @@ static PL011 pl011 = PL011_CREATE
 );
 
 static SP804 sp804 = SP804_CREATE(0x101E2000);
-
-static LAN91C lan91c = LAN91C_CREATE
-(
-   0x10010000,
-   TASK_CREATE_PTR("lan91c", 2048),
-   TASK_HIGH_PRIORITY
-);
+static LAN91C lan91c = LAN91C_CREATE(0x10010000);
 
 static HistoryData historyData = HISTORY_DATA(10);
 static Task httpTask = TASK_CREATE("httpd", 2048);
@@ -86,7 +80,7 @@ static HTTPServer httpServer;
 /****************************************************************************
  *
  ****************************************************************************/
-static void tlCmd(int argc, char* argv[])
+static void taskListCmd(int argc, char* argv[])
 {
    taskList();
 }
@@ -96,7 +90,7 @@ static void tlCmd(int argc, char* argv[])
  ****************************************************************************/
 static const ShellCmd SHELL_CMDS[] =
 {
-   {"tl", tlCmd},
+   {"tl", taskListCmd},
    {"pwd", fsUtils_pwd},
    {"cd", fsUtils_cd},
    {"ls", fsUtils_ls},
@@ -131,7 +125,7 @@ static const HTTPCallback HTTP_CALLBACKS[] =
  ****************************************************************************/
 static void taskTick(HWTimer* timer)
 {
-   unsigned long tickClks = sp804.timer.clk / TICK_HZ;
+   unsigned long tickClks = sp804.timer.clk / TASK_TICK_HZ;
    _taskTick(timer->loadValue / tickClks);
    _taskPreempt(true);
 }
@@ -155,7 +149,7 @@ void mmuFreePage(void* page) {}
  ****************************************************************************/
 void taskTimer(unsigned long ticks)
 {
-   unsigned long tickClks = sp804.timer.clk / TICK_HZ;
+   unsigned long tickClks = sp804.timer.clk / TASK_TICK_HZ;
    unsigned long maxTicks = sp804.timer.max / tickClks;
 
    if (ticks > maxTicks)
@@ -194,14 +188,6 @@ void _irq()
  ****************************************************************************/
 int main(void* vectors, void* stack, unsigned long stackSize)
 {
-   struct ip_addr gateway;
-   struct ip_addr netmask;
-   struct ip_addr ip;
-
-   IP4_ADDR(&gateway, 10, 0, 2, 2);
-   IP4_ADDR(&netmask, 255, 255, 255, 0);
-   IP4_ADDR(&ip, 10, 0, 2, 15);
-
    taskInit(&task0, "main", TASK_HIGH_PRIORITY, stack, stackSize);
 
    mmuInit(&mmu);
@@ -222,7 +208,8 @@ int main(void* vectors, void* stack, unsigned long stackSize)
    sp804.timer.callback = taskTick;
    sp804.timer.periodic = true;
 
-   lan91cInit(&lan91c, &ip, &netmask, &gateway, true);
+   tcpip_init(NULL, NULL);
+   lan91cInit(&lan91c, NULL, NULL, NULL, true);
    sic.ctrl.addHandler(&sic.ctrl, 25, lan91cIRQ, &lan91c, false, 1);
 
    memDevInit(&memDev, _binary_fs_data_bin_start,
@@ -230,16 +217,14 @@ int main(void* vectors, void* stack, unsigned long stackSize)
    romfsInit(&vfs, &memDev.dev);
    vfsMount(&vfs, NULL);
 
+   puts("AliOS on ARM");
+   enableInterrupts();
+
    httpServer.types = NULL;
    httpServer.callbacks = HTTP_CALLBACKS;
    httpServer.root = NULL;
    httpServer.index = "index.xhtml";
    taskStart(&httpTask, httpServerFx, &httpServer, TASK_LOW_PRIORITY);
-
-   tcpip_init(NULL, NULL);
-
-   puts("AliOS on ARM");
-   enableInterrupts();
 
    taskSetData(HISTORY_DATA_ID, &historyData);
    shellRun(SHELL_CMDS);

@@ -52,25 +52,23 @@ static struct
  ****************************************************************************/
 void __taskSwitch(void** current, void* next);
 
+#ifdef SMP
 /****************************************************************************
  *
  ****************************************************************************/
-void _kernelLock()
+void _smpLock()
 {
-#ifdef SMP
    testAndSet(&lock.smp, 0, 1);
-#endif
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-void _kernelUnlock()
+void _smpUnlock()
 {
-#ifdef SMP
    lock.smp = 0;
-#endif
 }
+#endif
 
 /****************************************************************************
  *
@@ -78,7 +76,9 @@ void _kernelUnlock()
 void kernelLock()
 {
    lock.flag = disableInterrupts();
-   _kernelLock();
+#ifdef SMP
+   _smpLock();
+#endif
 }
 
 /****************************************************************************
@@ -86,7 +86,9 @@ void kernelLock()
  ****************************************************************************/
 void kernelUnlock()
 {
-   _kernelUnlock();
+#ifdef SMP
+   _smpUnlock();
+#endif
    if (lock.flag)
       enableInterrupts();
 }
@@ -113,7 +115,11 @@ void taskSetup(Task* task, void (*fx)(void*, void*), void* arg1, void* arg2)
    stack[-9] = 0x55555555;
    stack[-10] = 0x44444444;
    stack[-11] = 0x33333333;
+#ifdef SMP
    stack[-12] = CPU_I_BIT | CPU_MODE_SUPERVISOR;
+#else
+   stack[-12] = CPU_MODE_SUPERVISOR;
+#endif
    stack[-13] = (uintptr_t) arg2;
    stack[-14] = (uintptr_t) arg1;
 
@@ -136,19 +142,16 @@ unsigned long taskStackUsage(Task* task)
 }
 #endif
 
+#ifdef SMP
 /****************************************************************************
  *
  ****************************************************************************/
 void _taskEntry(Task* task)
 {
-   _kernelUnlock();
+   _smpUnlock();
    enableInterrupts();
 }
-
-/****************************************************************************
- *
- ****************************************************************************/
-void _taskExit(Task* task) {}
+#endif
 
 /****************************************************************************
  *

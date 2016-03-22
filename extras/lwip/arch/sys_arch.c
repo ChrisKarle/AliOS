@@ -25,31 +25,22 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ****************************************************************************/
+#include <stdlib.h>
 #include "lwip/sys.h"
 #include "sys_arch.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-#ifndef LWIP_TICKS
-#define LWIP_TICKS (TICK_HZ / 100)
+#if (TASK_TICK_HZ != 1000) && (TASK_TICK_HZ != 100) && \
+    (TASK_TICK_HZ != 10)   && (TASK_TICK_HZ != 1)
+#error Unsupported TASK_TICK_HZ
 #endif
 
 /****************************************************************************
  *
  ****************************************************************************/
-static Timer lwipTimer = TIMER_CREATE("net", TIMER_FLAG_ASYNC |
-                                      TIMER_FLAG_PERIODIC);
-static Mutex lwipLock = MUTEX_CREATE("net");
 static volatile u32_t lwipTicks = 0;
-
-/****************************************************************************
- *
- ****************************************************************************/
-static void lwipTimerFx(Timer* timer)
-{
-   lwipTicks += LWIP_TICKS;
-}
 
 /****************************************************************************
  *
@@ -83,14 +74,25 @@ void sys_sem_signal(sys_sem_t* sem)
 u32_t sys_arch_sem_wait(sys_sem_t* sem, u32_t timeout)
 {
    u32_t start = lwipTicks;
-   u32_t ticks = 0;
+   u32_t ticks;
 
    if (timeout > 0)
-      ticks = LWIP_TICKS * timeout;
-   else
-      ticks = -1;
+   {
+      u32_t remainder;
 
-   if (!semaphoreTake(sem, ticks))
+      ticks = timeout * TASK_TICK_HZ;
+      remainder = ticks % 1000;
+      ticks /= 1000;
+
+      if (remainder)
+         ticks++;
+   }
+   else
+   {
+      ticks = -1;
+   }
+
+   if (!semaphoreTake(sem, (unsigned long) ticks))
       return SYS_ARCH_TIMEOUT;
 
    if (timeout > 0)
@@ -132,7 +134,7 @@ err_t sys_mbox_new(sys_mbox_t* mbox, int size)
    mbox->max = size;
    mbox->count = 0;
    mbox->index = 0;
-   mbox->buffer = kmalloc(size * sizeof(void*));
+   mbox->buffer = malloc(size * sizeof(void*));
    mbox->task = NULL;
 
    return ERR_OK;
@@ -143,7 +145,7 @@ err_t sys_mbox_new(sys_mbox_t* mbox, int size)
  ****************************************************************************/
 void sys_mbox_free(sys_mbox_t* mbox)
 {
-   kfree(mbox->buffer);
+   free(mbox->buffer);
 }
 
 /****************************************************************************
@@ -159,10 +161,13 @@ void sys_mbox_post(sys_mbox_t* mbox, void* msg)
  ****************************************************************************/
 err_t sys_mbox_trypost(sys_mbox_t* mbox, void* msg)
 {
-   if (!queuePush(mbox, true, &msg, 0))
-      return ERR_MEM;
+   err_t status;
 
-   return ERR_OK;
+   kernelLock();
+   status = _queuePush(mbox, true, &msg) ? ERR_OK : ERR_MEM;
+   kernelUnlock();
+
+   return status;
 }
 
 /****************************************************************************
@@ -174,11 +179,22 @@ u32_t sys_arch_mbox_fetch(sys_mbox_t* mbox, void** msg, u32_t timeout)
    u32_t ticks = 0;
 
    if (timeout > 0)
-      ticks = LWIP_TICKS * timeout;
-   else
-      ticks = -1;
+   {
+      u32_t remainder;
 
-   if (!queuePop(mbox, true, false, msg, ticks))
+      ticks = timeout * TASK_TICK_HZ;
+      remainder = ticks % 1000;
+      ticks /= 1000;
+
+      if (remainder)
+         ticks++;
+   }
+   else
+   {
+      ticks = -1;
+   }
+
+   if (!queuePop(mbox, true, false, msg, (unsigned long) ticks))
       return SYS_ARCH_TIMEOUT;
 
    if (timeout > 0)
@@ -279,7 +295,11 @@ sys_thread_t sys_thread_new(const char* name, void (*thread)(void* arg),
                             void* arg, int stackSize, int priority)
 {
    Task* task = taskCreate(name, stackSize, true);
-   taskStart(task, thread, arg, priority);
+
+   kernelLock();
+   _taskStart(task, thread, arg, priority);
+   kernelUnlock();
+
    return task;
 }
 
@@ -288,7 +308,7 @@ sys_thread_t sys_thread_new(const char* name, void (*thread)(void* arg),
  ****************************************************************************/
 sys_prot_t sys_arch_protect()
 {
-   mutexLock(&lwipLock, -1);
+   kernelLock();
    return 0;
 }
 
@@ -297,7 +317,7 @@ sys_prot_t sys_arch_protect()
  ****************************************************************************/
 void sys_arch_unprotect(sys_prot_t state)
 {
-   mutexUnlock(&lwipLock);
+   kernelUnlock();
 }
 
 /****************************************************************************
@@ -311,7 +331,12 @@ u32_t sys_now()
 /****************************************************************************
  *
  ****************************************************************************/
-void sys_init()
+void sys_tick(u32_t ticks)
 {
-   timerAdd(&lwipTimer, NULL, lwipTimerFx, NULL, 0, LWIP_TICKS);
+   lwipTicks += 1000 / TASK_TICK_HZ;
 }
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void sys_init() {}

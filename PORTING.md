@@ -5,29 +5,17 @@ architecture.
 
 ---
 ```c
-void _kernelLock()
-```
-This function is called to lock the kernel within an interrupt context.  This
-function is never called recursively.
-
----
-```c
-void _kernelUnlock()
-```
-This function is called to unlock the kernel within an interrupt context.
-
----
-```c
 void kernelLock()
 ```
-This function is called to lock the kernel outside an interrupt context. This
-function is never called recursively.
+This function is called to lock the kernel. This function is never called
+recursively, but may be called from an interrupt context.
 
 ---
 ```c
 void kernelUnlock()
 ```
-This function is called to unlock the kernel outside an interrupt context.
+This function is called to unlock the kernel.  This function may be called
+from an interrupt context.
 
 ---
 ```c
@@ -45,24 +33,6 @@ unsigned long taskStackUsage(Task* task)
 This function is required if TASK_STACK_USAGE is enabled.  This function must
 return the number of bytes of stack that has been used by a task.  This
 function is useful in properly configuring the stack sizes of tasks.
-
----
-```c
-void _taskEntry(Task* task)
-```
-This function is called by the kernel before a task is run for the first time.
-Technically, the task is running but the kernel is just about call the task's
-fx(arg) function.  Depending on the architecture, the kernel may start a
-task with the kernel locked, and this callback can be used to unlock the
-kernel before the task is officially run.
-
----
-```c
-void _taskExit(Task* task)
-```
-This function is called by the kernel after a task has finished execution.
-The task's resources (stack, etc.) are no longer in use.  This function can
-be useful if your port has specific cleanup actions after a task has exited.
 
 ---
 ```c
@@ -84,7 +54,7 @@ void taskTimer(unsigned long ticks)
 ```
 This function is called by the kernel to schedule a system timer/tick event.
 The "ticks" argument is the maximum number of system ticks that can elapse.
-It is completely acceptable to schedule a timer/tick event sooner than
+It is completely acceptable to schedule a timer/tick event earlier than
 requested by the kernel (for example, if the underlying hardware timer used
 cannot be set for that long of a duration).  A "ticks" value of 0 denotes the
 kernel requesting to disable system timer/tick events.  This function is
@@ -111,12 +81,44 @@ of system timer/ticks that have elapsed.  See taskTimer().
 
 ---
 ```c
+#define _taskEntry
+```
+This macro defines a function that is called by the kernel before a task is
+run for the first time.  Technically, the task is running but the kernel is
+just about call the task's fx(arg) function.  Depending on the architecture,
+the kernel may start a task with the kernel locked, and this callback can be
+used to unlock the kernel before the task is officially run.
+
+---
+```c
+#define _taskExit
+```
+This macro defines a function that is called by the kernel after a task has
+finished execution.  The task's resources (stack, etc.) are no longer in use.
+This function can be useful if your port has specific cleanup actions after a
+task has exited.
+
+---
+```c
 #define _taskYield
 ```
 This macro defines a function that is called whenever a task yields the
 processor.  This is useful in implementing "fair timeslicing", where a task
 always receives a "full" timeslice.  This would only be required when
 preemption is used, which is rarely necessary in embedded.
+
+---
+```c
+void _smpLock()
+```
+This function is called to lock the kernel within an interrupt context.  This
+function is never called recursively.
+
+---
+```c
+void _smpUnlock()
+```
+This function is called to unlock the kernel within an interrupt context.
 
 ---
 ```c

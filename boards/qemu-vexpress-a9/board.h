@@ -54,6 +54,7 @@
 #define TASK_LIST        1
 #define TASK_STACK_USAGE 1
 #define TASK_AT_EXIT     1
+#define TASK_TICK_HZ     1000
 #define TASK0_STACK_SIZE 2048
 
 /****************************************************************************
@@ -62,11 +63,6 @@
 #define TASK_HIGH_PRIORITY  0
 #define TASK_LOW_PRIORITY   1
 #define TASK_NUM_PRIORITIES 2
-
-/****************************************************************************
- *
- ****************************************************************************/
-#define TICK_HZ 1000
 
 #ifndef __ASM__
 #include <stdbool.h>

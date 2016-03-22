@@ -73,6 +73,8 @@ static Task* waiting = NULL;
 static Task* __previous[SMP] = {NULL};
 static Task* _current[SMP] = {NULL};
 #else
+#define _smpLock()
+#define _smpUnlock()
 static Task* _previous = NULL;
 static Task* current = NULL;
 #endif
@@ -257,7 +259,9 @@ static bool mutexDelWait(Mutex* mutex, Task* _task)
 static void taskEntry(void* arg1, void* arg2)
 {
    void (*fx)(void*) = arg1;
+#ifdef _taskEntry
    _taskEntry(current);
+#endif
    fx(arg2);
    taskExit();
 }
@@ -324,7 +328,9 @@ static void taskSwitch(Task* task, unsigned char state)
 #ifdef kfree
       unsigned short mask = TASK_FLAG_ALLOC | TASK_FLAG_FREE;
 #endif
+#ifdef _taskExit
       _taskExit(_previous);
+#endif
 #ifdef kfree
       if ((_previous->flags & mask) == mask)
       {
@@ -545,9 +551,9 @@ bool _taskStart(Task* task, void (*fx)(void*), void* arg,
 {
    bool success;
 
-   _kernelLock();
+   _smpLock();
    success = __taskStart(task, fx, arg, priority);
-   _kernelUnlock();
+   _smpUnlock();
 
    return success;
 }
@@ -585,14 +591,14 @@ void _taskPreempt(bool yield)
 {
    Task* task = NULL;
 
-   _kernelLock();
+   _smpLock();
 
    task = taskNext(yield ? current->priority + 1 : current->priority);
 
    if (task != NULL)
       taskSwitch(task, TASK_STATE_RUN);
 
-   _kernelUnlock();
+   _smpUnlock();
 }
 #endif
 
@@ -685,9 +691,9 @@ static void __taskPriority(Task* task, unsigned char priority)
  ****************************************************************************/
 void _taskPriority(Task* task, unsigned char priority)
 {
-   _kernelLock();
+   _smpLock();
    __taskPriority(task, priority);
-   _kernelUnlock();
+   _smpUnlock();
 }
 
 /****************************************************************************
@@ -1043,7 +1049,7 @@ void _taskTick(unsigned long _ticks)
    Timer* async = NULL;
 #endif
 
-   _kernelLock();
+   _smpLock();
 
    while (waiting != NULL)
    {
@@ -1181,7 +1187,7 @@ void _taskTick(unsigned long _ticks)
 
    taskSetTimer(true);
 
-   _kernelUnlock();
+   _smpUnlock();
 
 #if TIMERS
    while (async != NULL)
@@ -1347,7 +1353,7 @@ static void __timerCancel(Timer* _timer)
 void _timerAdd(Timer* timer, Task* task, void (*fx)(Timer*), void* ptr,
                unsigned char priority, unsigned long ticks)
 {
-   _kernelLock();
+   _smpLock();
 
    timer->task = task;
    timer->fx = fx;
@@ -1358,7 +1364,7 @@ void _timerAdd(Timer* timer, Task* task, void (*fx)(Timer*), void* ptr,
    __timerAdd(0, timer, ticks);
    taskSetTimer(false);
 
-   _kernelUnlock();
+   _smpUnlock();
 }
 
 /****************************************************************************
@@ -1386,9 +1392,9 @@ void timerAdd(Timer* timer, Task* task, void (*fx)(Timer*), void* ptr,
  ****************************************************************************/
 void _timerCancel(Timer* timer)
 {
-   _kernelLock();
+   _smpLock();
    __timerCancel(timer);
-   _kernelUnlock();
+   _smpUnlock();
 }
 
 /****************************************************************************
@@ -1591,9 +1597,9 @@ bool _queuePush(Queue* queue, bool tail, const void* src)
 {
    bool success;
 
-   _kernelLock();
+   _smpLock();
    success = __queuePush(queue, tail, src);
-   _kernelUnlock();
+   _smpUnlock();
 
    return success;
 }
@@ -1644,9 +1650,9 @@ bool _queuePop(Queue* queue, bool head, bool peek, void* dst)
 {
    bool success;
 
-   _kernelLock();
+   _smpLock();
    success = __queuePop(queue, head, peek, dst);
-   _kernelUnlock();
+   _smpUnlock();
 
    return success;
 }
@@ -1785,9 +1791,9 @@ bool _semaphoreGive(Semaphore* semaphore)
 {
    bool success;
 
-   _kernelLock();
+   _smpLock();
    success = __semaphoreGive(semaphore);
-   _kernelUnlock();
+   _smpUnlock();
 
    return success;
 }

@@ -58,8 +58,8 @@ debug: $(ELF_FILE)
 ##############################################################################
 #
 ##############################################################################
-#C_FLAGS = -g -Wall -Wno-main -Wno-address -mcpu=rx600 -nostdinc
-C_FLAGS = -Os -Wall -Wno-main -Wno-address -mcpu=rx600 -nostdinc
+C_FLAGS = -g -Wall -Wno-main -Wno-address -mcpu=rx600 -nostdinc
+#C_FLAGS = -Os -Wall -Wno-main -Wno-address -mcpu=rx600 -nostdinc
 LD_FLAGS = -nostdlib -Wl,-loptc -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I$(TOOLCHAIN_PATH)/rx-elf/optlibinc -I.
 C_FILES = board.c
@@ -78,14 +78,21 @@ include ../../kernel/Makefile.inc
 ##############################################################################
 #
 ##############################################################################
+VPATH += ../../drivers/net
 VPATH += ../../drivers/uart
 INCLUDES += -I../../drivers
-C_FILES += rx62n_uart.c
+C_FILES += dp83640.c phy.c rx62n_eth.c rx62n_uart.c
+
+##############################################################################
+#
+##############################################################################
+include ../../extras/lwip/Makefile.inc
 
 ##############################################################################
 #
 ##############################################################################
 include ../../extras/Makefile.inc
+include ../../extras/heap/Makefile.inc
 include ../../extras/readline/Makefile.inc
 include ../../extras/shell/Makefile.inc
 
@@ -103,22 +110,25 @@ DEP_FILES = $(C_FILES:%.c=%.d)
 DEP_FILES += $(S_FILES:%.S=%.d)
 
 $(ELF_FILE): $(OBJ_FILES)
-	$(CROSS_COMPILE)gcc -o $@ $(OBJ_FILES) $(LD_FLAGS)
+	@echo -e "\tLD\t$@"
+	@$(CROSS_COMPILE)gcc -o $@ $(OBJ_FILES) $(LD_FLAGS)
 
 %.o: %.c
-	$(CROSS_COMPILE)gcc $(C_FLAGS) $(INCLUDES) -M -o $*.d $<
-	$(CROSS_COMPILE)gcc $(C_FLAGS) $(INCLUDES) -c -o $@ $<
+	@echo -e "\tCC\t$@"
+	@$(CROSS_COMPILE)gcc $(C_FLAGS) $(INCLUDES) -M -o $*.d $<
+	@$(CROSS_COMPILE)gcc $(C_FLAGS) $(INCLUDES) -c -o $@ $<
 
 %.o: %.S
-	$(CROSS_COMPILE)gcc -D__ASM__ $(C_FLAGS) $(INCLUDES) -M -o $*.d $<
-	$(CROSS_COMPILE)gcc -D__ASM__ $(C_FLAGS) $(INCLUDES) -c -o $@ $<
+	@echo -e "\tAS\t$@"
+	@$(CROSS_COMPILE)gcc -D__ASM__ $(C_FLAGS) $(INCLUDES) -M -o $*.d $<
+	@$(CROSS_COMPILE)gcc -D__ASM__ $(C_FLAGS) $(INCLUDES) -c -o $@ $<
 
 .PHONY: clean obj_clean dep_clean
 clean: obj_clean dep_clean
-	rm -f $(ELF_FILE) $(MAP_FILE)
+	@rm -f $(ELF_FILE) $(MAP_FILE)
 obj_clean:
-	rm -f $(OBJ_FILES)
+	@rm -f $(OBJ_FILES)
 dep_clean:
-	rm -f $(DEP_FILES)
+	@rm -f $(DEP_FILES)
 
 -include $(DEP_FILES)

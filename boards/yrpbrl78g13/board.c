@@ -107,10 +107,10 @@ void taskTimer(unsigned long ticks)
 {
    if (ticks > 0)
    {
-      if (ticks > (4095 / (FIL_HZ / TICK_HZ)))
-         ticks = 4095 / (FIL_HZ / TICK_HZ);
+      if (ticks > (4095 / (FIL_HZ / TASK_TICK_HZ)))
+         ticks = 4095 / (FIL_HZ / TASK_TICK_HZ);
 
-      ITMC = 0x8000 | ((unsigned int) ticks * (FIL_HZ / TICK_HZ));
+      ITMC = 0x8000 | ((unsigned int) ticks * (FIL_HZ / TASK_TICK_HZ));
    }
 }
 
@@ -127,7 +127,7 @@ void taskWait()
  ****************************************************************************/
 void IRQ _INTIT()
 {
-   unsigned int ticks = (ITMC & 0x0FFF) / (FIL_HZ / TICK_HZ);
+   unsigned int ticks = (ITMC & 0x0FFF) / (FIL_HZ / TASK_TICK_HZ);
    ITMC = 0x0000;
    _taskTick(ticks);
    _taskPreempt(true);
