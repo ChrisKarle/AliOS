@@ -76,12 +76,12 @@
 /****************************************************************************
  *
  ****************************************************************************/
-#define LWIP_DEBUG       1
+//#define LWIP_DEBUG       1
 //#define IP_DEBUG         LWIP_DBG_ON
 //#define ETHARP_DEBUG     LWIP_DBG_ON
 //#define ICMP_DEBUG       LWIP_DBG_ON
 //#define UDP_DEBUG        LWIP_DBG_ON
-#define DHCP_DEBUG       LWIP_DBG_ON
+//#define DHCP_DEBUG       LWIP_DBG_ON
 //#define TCP_INPUT_DEBUG  LWIP_DBG_ON
 //#define TCP_OUTPUT_DEBUG LWIP_DBG_ON
 //#define TCP_DEBUG        LWIP_DBG_ON
