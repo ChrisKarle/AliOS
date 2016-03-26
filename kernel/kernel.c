@@ -388,6 +388,8 @@ static void taskTimeout(unsigned char state, unsigned long ticks)
       {
          if (rTicks != -1)
          {
+            rTicks++;
+
             if (rTicks < task->wait.timeout)
             {
                task->wait.timeout -= rTicks;

@@ -5,6 +5,12 @@ architecture.
 
 ---
 ```c
+void kernelLocked()
+```
+This function is called to determine if the kernel is locked.
+
+---
+```c
 void kernelLock()
 ```
 This function is called to lock the kernel. This function is never called

@@ -163,9 +163,10 @@ err_t sys_mbox_trypost(sys_mbox_t* mbox, void* msg)
 {
    err_t status;
 
-   kernelLock();
-   status = _queuePush(mbox, true, &msg) ? ERR_OK : ERR_MEM;
-   kernelUnlock();
+   if (kernelLocked())
+      status = _queuePush(mbox, true, &msg) ? ERR_OK : ERR_MEM;
+   else
+      status = queuePush(mbox, true, &msg, 0) ? ERR_OK : ERR_MEM;
 
    return status;
 }
@@ -215,10 +216,14 @@ u32_t sys_arch_mbox_fetch(sys_mbox_t* mbox, void** msg, u32_t timeout)
  ****************************************************************************/
 u32_t sys_arch_mbox_tryfetch(sys_mbox_t* mbox, void** msg)
 {
-   if (!queuePop(mbox, true, false, msg, 0))
-      return SYS_MBOX_EMPTY;
+   u32_t status = 0;
 
-   return 0;
+   if (kernelLocked())
+      status = _queuePop(mbox, true, false, msg) ? 0 : SYS_MBOX_EMPTY;
+   else
+      status = queuePop(mbox, true, false, msg, 0) ? 0 : SYS_MBOX_EMPTY;
+
+   return status;
 }
 
 /****************************************************************************
@@ -296,9 +301,10 @@ sys_thread_t sys_thread_new(const char* name, void (*thread)(void* arg),
 {
    Task* task = taskCreate(name, stackSize, true);
 
-   kernelLock();
-   _taskStart(task, thread, arg, priority);
-   kernelUnlock();
+   if (kernelLocked())
+      _taskStart(task, thread, arg, priority);
+   else
+      taskStart(task, thread, arg, priority);
 
    return task;
 }
@@ -333,7 +339,7 @@ u32_t sys_now()
  ****************************************************************************/
 void sys_tick(u32_t ticks)
 {
-   lwipTicks += 1000 / TASK_TICK_HZ;
+   lwipTicks += ticks * (1000 / TASK_TICK_HZ);
 }
 
 /****************************************************************************
