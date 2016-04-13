@@ -41,35 +41,13 @@ static UART uart2 = UART_CREATE
    QUEUE_CREATE_PTR("uart2_rx", 1, 8)
 );
 
-static Task task1 = TASK_CREATE("task1", 256);
+static Task task1 = TASK_CREATE("task1", TASK_HIGH_PRIORITY, 256);
 static Task task0;
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void delay(unsigned int msec)
-{
-   PER0 |= 0x01;
-
-   TPS0 = 0x0006;
-   TMR00 = 0x0000;
-   TDR00 = 500;
-   TS0 = 0x0001;
-
-   while (msec > 0)
-   {
-      while (TCR00 == 0);
-      while (TCR00 != 0);
-      msec--;
-   }
-
-   PER0 &= ~0x01;
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-static void blinkFx(void* arg)
+static void taskFx1(void* arg)
 {
    ADPC = 0x00;
    PM2 &= ~0x02;
@@ -77,6 +55,9 @@ static void blinkFx(void* arg)
    ADM2 = 0x00;
    ADS = 0x02;
    ADM0 = 0x01;
+
+   P7 &= ~0x80;
+   PM7 &= ~0x80;
 
    taskSleep(10);
 
@@ -103,21 +84,23 @@ static void blinkFx(void* arg)
 /****************************************************************************
  *
  ****************************************************************************/
-void taskTimer(unsigned long ticks)
+unsigned long taskScheduleTick(bool adj, unsigned long ticks)
 {
-   if (ticks > 0)
+   if (!adj)
    {
-      if (ticks > (4095 / (FIL_HZ / TASK_TICK_HZ)))
-         ticks = 4095 / (FIL_HZ / TASK_TICK_HZ);
-
-      ITMC = 0x8000 | ((unsigned int) ticks * (FIL_HZ / TASK_TICK_HZ));
+      if (ticks > 0)
+         ITMC = 0x8000 | (FIL_HZ / TASK_TICK_HZ);
+      else
+         ITMC = 0x0000;
    }
+
+   return 0;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-void taskWait()
+void taskIdle()
 {
    __asm__ __volatile__("halt");
 }
@@ -127,9 +110,7 @@ void taskWait()
  ****************************************************************************/
 void IRQ _INTIT()
 {
-   unsigned int ticks = (ITMC & 0x0FFF) / (FIL_HZ / TASK_TICK_HZ);
-   ITMC = 0x0000;
-   _taskTick(ticks);
+   _taskTick(1);
    _taskPreempt(true);
 }
 
@@ -163,31 +144,25 @@ void IRQ _INTSE2()
 int main(void* stack, unsigned int stackSize)
 {
    CMC = 0;
-   delay(10);
    PER0 = 0x28;
-   delay(10);
 
    taskInit(&task0, "main", TASK_LOW_PRIORITY, stack, stackSize);
-
-   P7 &= ~0x80;
-   PM7 &= ~0x80;
-
-   uartInit(&uart2, CPU_HZ, 115200, UART_DPS_8N1);
 
    P1 = 0x08;
    PM1 = ~0x08;
 
+   uartInit(&uart2, CPU_HZ, 115200, UART_DPS_8N1);
    libcInit(&uart2.dev);
 
    /* prep the interval timer */
-   OSMC = 0x10;
    PER0 |= 0x80;
+   OSMC = 0x10;
    IF1H &= ~0x04;
    MK1H &= ~0x04;
 
    enableInterrupts();
 
-   taskStart(&task1, blinkFx, NULL, TASK_LOW_PRIORITY);
+   taskStart(&task1, taskFx1, NULL);
 
    for (;;)
       putchar(getchar());

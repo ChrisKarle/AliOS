@@ -44,6 +44,15 @@
 /****************************************************************************
  *
  ****************************************************************************/
+#define TASK_FLAG_STARTED 0x01
+#define TASK_FLAG_IDLE    0x02
+#define TASK_FLAG_RESTART 0x04
+#define TASK_FLAG_MALLOC  0x10
+#define TASK_FLAG_FREE    0x20
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 #ifndef TASK_NUM_TASKDATA
 #define TASK_NUM_TASKDATA 0
 #endif
@@ -51,219 +60,202 @@
 /****************************************************************************
  *
  ****************************************************************************/
-#define TASK_FLAG_ALLOC 0x01
-#define TASK_FLAG_FREE  0x02
-
-#if TIMERS
-/****************************************************************************
- *
- ****************************************************************************/
-static void __timerAdd(int list, Timer* timer, unsigned long ticks);
+#ifndef _taskYield
+#define _taskYield(t)
 #endif
 
 /****************************************************************************
  *
  ****************************************************************************/
-static Task* hReady[TASK_NUM_PRIORITIES] = {NULL};
-static Task* tReady[TASK_NUM_PRIORITIES] = {NULL};
-static Task* waiting = NULL;
+#if defined(SMP) && (SMP < 1)
+#error SMP cannot be less than 1
+#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static struct
+{
+   Task* head;
+   Task* tail;
+
+} ready[TASK_NUM_PRIORITIES];
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 #ifdef SMP
-#define _previous __previous[cpuID()]
+static Task* _current[SMP];
 #define current _current[cpuID()]
-static Task* __previous[SMP] = {NULL};
-static Task* _current[SMP] = {NULL};
 #else
+static Task* current;
 #define _smpLock()
 #define _smpUnlock()
-static Task* _previous = NULL;
-static Task* current = NULL;
 #endif
-#if TIMERS
-static Timer* timers[2] = {NULL, NULL};
-#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static Task* inactive;
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static Task* reap;
+
 #if TASK_NUM_TASKDATA > 0
+/****************************************************************************
+ *
+ ****************************************************************************/
 static struct
 {
    TaskData* head;
-   TaskData* tail;
    TaskData data[TASK_NUM_TASKDATA];
 
-} taskData = {NULL};
+} taskData;
+#endif
+
+#if TASK_REAPER
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void taskSetTimeout(unsigned char state, unsigned long ticks);
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static Task reaper = TASK_CREATE("reaper", TASK_REAPER_PRIORITY,
+                                 TASK_REAPER_STACK_SIZE);
+#endif
+
+#if TIMERS
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void __timerAdd(Timer* timer);
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static Timer* timers;
 #endif
 
 #if QUEUES
 /****************************************************************************
  *
  ****************************************************************************/
-static void queueAddWait(Queue* queue, Task* _task)
-{
-   Task* previous = NULL;
-   Task* task = queue->task;
-
-   while (task != NULL)
-   {
-      if (_task->priority < task->priority)
-         break;
-
-      previous = task;
-      task = task->wait.next;
-   }
-
-   _task->wait.next = task;
-
-   if (previous != NULL)
-      previous->wait.next = _task;
-   else
-      queue->task = _task;
-}
+static void queueAddTask(Queue* queue, Task* task);
 
 /****************************************************************************
  *
  ****************************************************************************/
-static bool queueDelWait(Queue* queue, Task* _task)
-{
-   Task* previous = NULL;
-   Task* task = queue->task;
-
-   while (task != NULL)
-   {
-      if (task == _task)
-      {
-         if (previous != NULL)
-            previous->wait.next = task->wait.next;
-         else
-            queue->task = task->wait.next;
-
-         return true;
-      }
-
-      previous = task;
-      task = task->wait.next;
-   }
-
-   return false;
-}
+static bool queueDelTask(Queue* queue, Task* task);
 #endif
 
 #if SEMAPHORES
 /****************************************************************************
  *
  ****************************************************************************/
-static void semaphoreAddWait(Semaphore* semaphore, Task* _task)
-{
-   Task* previous = NULL;
-   Task* task = semaphore->task;
-
-   while (task != NULL)
-   {
-      if (_task->priority < task->priority)
-         break;
-
-      previous = task;
-      task = task->wait.next;
-   }
-
-   _task->wait.next = task;
-
-   if (previous != NULL)
-      previous->wait.next = _task;
-   else
-      semaphore->task = _task;
-}
+static void semaphoreAddTask(Semaphore* semaphore, Task* task);
 
 /****************************************************************************
  *
  ****************************************************************************/
-static bool semaphoreDelWait(Semaphore* semaphore, Task* _task)
-{
-   Task* previous = NULL;
-   Task* task = semaphore->task;
-
-   while (task != NULL)
-   {
-      if (task == _task)
-      {
-         if (previous != NULL)
-            previous->wait.next = task->wait.next;
-         else
-            semaphore->task = task->wait.next;
-
-         return true;
-      }
-
-      previous = task;
-      task = task->wait.next;
-   }
-
-   return false;
-}
+static bool semaphoreDelTask(Semaphore* semaphore, Task* task);
 #endif
 
 #if MUTEXES
 /****************************************************************************
  *
  ****************************************************************************/
-static void mutexAddWait(Mutex* mutex, Task* _task)
-{
-   Task* previous = NULL;
-   Task* task = mutex->task;
-
-   while (task != NULL)
-   {
-      if (_task->priority < task->priority)
-         break;
-
-      previous = task;
-      task = task->wait.next;
-   }
-
-   _task->wait.next = task;
-
-   if (previous != NULL)
-      previous->wait.next = _task;
-   else
-      mutex->task = _task;
-}
+static void mutexAddTask(Mutex* mutex, Task* task);
 
 /****************************************************************************
  *
  ****************************************************************************/
-static bool mutexDelWait(Mutex* mutex, Task* _task)
-{
-   Task* previous = NULL;
-   Task* task = mutex->task;
+static bool mutexDelTask(Mutex* mutex, Task* task);
+#endif
 
-   while (task != NULL)
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void taskReaper(bool runOnce)
+{
+   for (;;)
    {
-      if (task == _task)
+      kernelLock();
+
+      if (reap != NULL)
       {
-         if (previous != NULL)
-            previous->wait.next = task->wait.next;
-         else
-            mutex->task = task->wait.next;
+         Task* task = reap;
+         reap = reap->next;
 
-         return true;
+         _taskExit(task);
+         kernelUnlock();
+
+         task->state = TASK_STATE_INIT;
+
+         if (task->flags & TASK_FLAG_RESTART)
+         {
+            task->flags &= ~TASK_FLAG_RESTART;
+            taskStart(task, task->start.fx, task->start.arg);
+         }
+#ifdef kfree
+         else if (task->flags & TASK_FLAG_FREE)
+         {
+            kfree(task->stack.base);
+            kfree(task);
+         }
+#endif
+         if (runOnce)
+            break;
       }
-
-      previous = task;
-      task = task->wait.next;
+      else
+      {
+         kernelUnlock();
+         break;
+      }
    }
+}
 
-   return false;
+#if TASK_REAPER
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void taskReaperFx(void* arg)
+{
+   for (;;)
+   {
+      kernelLock();
+
+      if (reap == NULL)
+         taskSetTimeout(TASK_STATE_SLEEP, -1);
+
+      kernelUnlock();
+
+      taskReaper(false);
+   }
 }
 #endif
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void taskEntry(void* arg1, void* arg2)
+static void taskSetReady(Task* task)
 {
-   void (*fx)(void*) = arg1;
-#ifdef _taskEntry
-   _taskEntry(current);
-#endif
-   fx(arg2);
-   taskExit();
+   task->state = TASK_STATE_READY;
+   task->next = NULL;
+
+   if (ready[task->priority].head != NULL)
+   {
+      ready[task->priority].tail->next = task;
+      ready[task->priority].tail = task;
+   }
+   else
+   {
+      ready[task->priority].head = task;
+      ready[task->priority].tail = task;
+   }
 }
 
 /****************************************************************************
@@ -271,14 +263,12 @@ static void taskEntry(void* arg1, void* arg2)
  ****************************************************************************/
 static Task* taskNext(unsigned char priority)
 {
-   unsigned char i;
-
-   for (i = 0; i < priority; i++)
+   for (unsigned char i = 0; i < priority; i++)
    {
-      if (hReady[i] != NULL)
+      if (ready[i].head != NULL)
       {
-         Task* task = hReady[i];
-         hReady[i] = hReady[i]->next;
+         Task* task = ready[i].head;
+         ready[i].head = ready[i].head->next;
          return task;
       }
    }
@@ -289,115 +279,104 @@ static Task* taskNext(unsigned char priority)
 /****************************************************************************
  *
  ****************************************************************************/
-static void taskSetReady(Task* task)
+static void taskSwitch(Task* task)
 {
-   task->state = TASK_STATE_READY;
-   task->next = NULL;
+   Task* previous = current;
 
-   if (hReady[task->priority] != NULL)
+   previous->flags &= ~TASK_FLAG_IDLE;
+
+   switch (previous->state)
    {
-      tReady[task->priority]->next = task;
-      tReady[task->priority] = task;
+      case TASK_STATE_RUN:
+         taskSetReady(previous);
+         break;
+
+      case TASK_STATE_END:
+         previous->next = reap;
+         reap = previous;
+         break;
    }
-   else
-   {
-      hReady[task->priority] = task;
-      tReady[task->priority] = task;
-   }
-}
 
-/****************************************************************************
- *
- ****************************************************************************/
-static void taskSwitch(Task* task, unsigned char state)
-{
-   if (current->state == TASK_STATE_RUN)
-      taskSetReady(current);
-
-   task->state = state;
-
-   if (task->state == TASK_STATE_RUN)
-      task->next = NULL;
-
-   _previous = current;
    current = task;
-   _taskSwitch(_previous, task);
+   current->state = TASK_STATE_RUN;
+   current->next = NULL;
 
-   if (_previous->state == TASK_STATE_END)
-   {
-#ifdef kfree
-      unsigned short mask = TASK_FLAG_ALLOC | TASK_FLAG_FREE;
+   _taskSwitch(previous, current);
+
+#ifdef SMP
+   current->cpu = (unsigned char) cpuID();
 #endif
-#ifdef _taskExit
-      _taskExit(_previous);
-#endif
-#ifdef kfree
-      if ((_previous->flags & mask) == mask)
-      {
-         kfree(_previous->stack.base);
-         kfree(_previous);
-         _previous = NULL;
-      }
-#endif
-   }
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void taskSetTimer(bool force)
+static void taskAdjTimeout(unsigned long adj)
 {
-   static unsigned long timeout = -1;
-   unsigned long ticks = -1;
+   if ((inactive != NULL) && (inactive->inactive.timeout != -1))
+   {
+      if (inactive->inactive.timeout > adj)
+         inactive->inactive.timeout -= adj;
+      else
+         inactive->inactive.timeout = 1;
+   }
 
 #if TIMERS
-   if ((timers[0] != NULL) && (timers[0]->ticks[0] < ticks))
-      ticks = timers[0]->ticks[0];
-
-   if ((timers[1] != NULL) && (timers[1]->ticks[0] < ticks))
-      ticks = timers[1]->ticks[0];
-#endif
-
-   if ((waiting != NULL) && (waiting->wait.timeout < ticks))
-      ticks = waiting->wait.timeout;
-
-   if (force || (ticks < timeout))
+   if (timers != NULL)
    {
-      if (ticks == 0)
-         ticks = 1;
-
-      taskTimer(ticks != -1 ? ticks : 0);
-
-      timeout = ticks;
+      if (timers->timeout[0] > adj)
+         timers->timeout[0] -= adj;
+      else
+         timers->timeout[0] = 1;
    }
+#endif
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void taskTimeout(unsigned char state, unsigned long ticks)
+static unsigned long taskGetTimeout()
 {
-   Task* task = waiting;
+   unsigned long timeout = -1;
+
+   if ((inactive != NULL) && (inactive->inactive.timeout < timeout))
+      timeout = inactive->inactive.timeout;
+
+#if TIMERS
+   if ((timers != NULL) && (timers->timeout[0] < timeout))
+      timeout = timers->timeout[0];
+#endif
+
+   return timeout;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void taskSetTimeout(unsigned char state, unsigned long ticks)
+{
+   Task* task = inactive;
 
    if (ticks > 0)
    {
       unsigned long rTicks = ticks;
       Task* previous = NULL;
 
-      while ((task != NULL) && (task->wait.timeout != -1))
+      if (rTicks != -1)
+         rTicks++;
+
+      while ((task != NULL) && (task->inactive.timeout != -1))
       {
          if (rTicks != -1)
          {
-            rTicks++;
-
-            if (rTicks < task->wait.timeout)
+            if (rTicks < task->inactive.timeout)
             {
-               task->wait.timeout -= rTicks;
+               task->inactive.timeout -= rTicks;
                break;
             }
             else
             {
-               rTicks -= task->wait.timeout;
+               rTicks -= task->inactive.timeout;
             }
          }
 
@@ -406,15 +385,26 @@ static void taskTimeout(unsigned char state, unsigned long ticks)
       }
 
       current->state = state;
-      current->wait.timeout = rTicks;
+      current->inactive.timeout = rTicks;
       current->next = task;
 
       if (previous != NULL)
+      {
          previous->next = current;
+      }
       else
-         waiting = current;
+      {
+         unsigned long timeout = taskGetTimeout();
 
-      taskSetTimer(false);
+         if (current->inactive.timeout < timeout)
+         {
+            bool adj = timeout != -1;
+            timeout = taskScheduleTick(adj, current->inactive.timeout);
+            taskAdjTimeout(timeout);
+         }
+
+         inactive = current;
+      }
    }
 
    do
@@ -423,16 +413,21 @@ static void taskTimeout(unsigned char state, unsigned long ticks)
 
       if (task != NULL)
       {
-#ifdef _taskYield
          _taskYield(task);
-#endif
-         taskSwitch(task, TASK_STATE_RUN);
+         taskSwitch(task);
       }
-      else if (ticks > 0)
+      else
       {
+         current->flags |= TASK_FLAG_IDLE;
+
          kernelUnlock();
-         taskWait();
+#if !TASK_REAPER
+         taskReaper(true);
+#endif
+         taskIdle();
          kernelLock();
+
+         current->flags &= ~TASK_FLAG_IDLE;
       }
 
    } while (current->state != TASK_STATE_RUN);
@@ -441,62 +436,60 @@ static void taskTimeout(unsigned char state, unsigned long ticks)
 /****************************************************************************
  *
  ****************************************************************************/
-static void taskCancelTimeout(Task* _task)
+static void taskCancelTimeout(Task* task)
 {
    Task* previous = NULL;
-   Task* task = waiting;
+   Task* ptr = inactive;
 
-   while (task != NULL)
+   while (ptr != NULL)
    {
-      if (task == _task)
+      if (ptr == task)
       {
-#ifdef SMP
-         int id;
-#endif
-         if ((task->wait.timeout != -1) && (task->next != NULL) &&
-             (task->next->wait.timeout != -1))
+         if ((task->inactive.timeout != -1) && (task->next != NULL) &&
+             (task->next->inactive.timeout != -1))
          {
-            task->next->wait.timeout += task->wait.timeout;
+            task->next->inactive.timeout += task->inactive.timeout;
          }
 
          if (previous != NULL)
-            previous->next = task->next;
-         else
-            waiting = task->next;
-#ifdef SMP
-         for (id = 0; id < SMP; id++)
          {
-            if (task == _current[id])
-            {
-               task->state = TASK_STATE_RUN;
-               task->next = NULL;
+            previous->next = task->next;
+         }
+         else
+         {
+            inactive = task->next;
 
-               if (id != cpuID())
-                  smpWake(id);
-
-               break;
-            }
+            if ((task->inactive.timeout != -1) && (taskGetTimeout() == -1))
+               taskScheduleTick(false, 0);
          }
 
-         if (id == SMP)
-            taskSetReady(task);
-#else
-         if (task == current)
+         if (task->flags & TASK_FLAG_IDLE)
          {
             task->state = TASK_STATE_RUN;
-            task->next = NULL;
+#ifdef SMP
+            if (task->cpu != (unsigned char) cpuID())
+               cpuWake((int) task->cpu);
+#endif
          }
          else
          {
             taskSetReady(task);
-         }
+#ifdef SMP
+            for (int cpu = 0; cpu < SMP; cpu++)
+            {
+               if (_current[cpu]->flags & TASK_FLAG_IDLE)
+               {
+                  cpuWake(cpu);
+                  break;
+               }
+            }
 #endif
-         taskSetTimer(false);
+         }
          break;
       }
 
-      previous = task;
-      task = task->next;
+      previous = ptr;
+      ptr = ptr->next;
    }
 }
 
@@ -504,15 +497,17 @@ static void taskCancelTimeout(Task* _task)
 /****************************************************************************
  *
  ****************************************************************************/
-Task* taskCreate(const char* name, unsigned long stackSize, bool freeOnExit)
+Task* taskCreate(const char* name, unsigned char priority,
+                 unsigned long stackSize, bool freeOnExit)
 {
    Task* task = kmalloc(sizeof(Task));
 
    memset(task, 0, sizeof(Task));
 
    task->name = name;
-   task->state = TASK_STATE_END;
-   task->flags = TASK_FLAG_ALLOC;
+   task->priority = priority;
+   task->state = TASK_STATE_INIT;
+   task->flags = TASK_FLAG_MALLOC;
    task->stack.size = stackSize;
    task->stack.base = kmalloc(stackSize);
 
@@ -526,35 +521,45 @@ Task* taskCreate(const char* name, unsigned long stackSize, bool freeOnExit)
 /****************************************************************************
  *
  ****************************************************************************/
-static bool __taskStart(Task* task, void (*fx)(void*), void* arg,
-                        unsigned char priority)
+static void __taskEntry()
 {
-   bool success = false;
-
-   if (priority >= TASK_NUM_PRIORITIES)
-      priority = TASK_NUM_PRIORITIES - 1;
-
-   if (task->state == TASK_STATE_END)
-   {
-      taskSetup(task, taskEntry, fx, arg);
-      task->priority = priority;
-      taskSetReady(task);
-      success = true;
-   }
-
-   return success;
+   current->flags = TASK_FLAG_STARTED;
+#ifdef SMP
+   current->cpu = (unsigned char) cpuID();
+#endif
+   _taskEntry(current);
+   current->start.fx(current->start.arg);
+   taskExit();
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-bool _taskStart(Task* task, void (*fx)(void*), void* arg,
-                unsigned char priority)
+static bool __taskStart(Task* task, void (*fx)(void*), void* arg)
 {
-   bool success;
+   if (task->state != TASK_STATE_INIT)
+      return false;
 
+   if (task->priority >= TASK_NUM_PRIORITIES)
+      task->priority = TASK_NUM_PRIORITIES - 1;
+
+   task->start.fx = fx;
+   task->start.arg = arg;
+
+   taskSetup(task, __taskEntry);
+
+   taskSetReady(task);
+
+   return true;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+bool _taskStart(Task* task, void (*fx)(void*), void* arg)
+{
    _smpLock();
-   success = __taskStart(task, fx, arg, priority);
+   bool success = __taskStart(task, fx, arg);
    _smpUnlock();
 
    return success;
@@ -563,21 +568,18 @@ bool _taskStart(Task* task, void (*fx)(void*), void* arg,
 /****************************************************************************
  *
  ****************************************************************************/
-bool taskStart(Task* task, void (*fx)(void*), void* arg,
-               unsigned char priority)
+bool taskStart(Task* task, void (*fx)(void*), void* arg)
 {
-   bool success;
-
    kernelLock();
 
-   success = __taskStart(task, fx, arg, priority);
+   bool success = __taskStart(task, fx, arg);
 
    if (success)
    {
       task = taskNext(current->priority);
 
       if (task != NULL)
-         taskSwitch(task, TASK_STATE_RUN);
+         taskSwitch(task);
    }
 
    kernelUnlock();
@@ -585,22 +587,68 @@ bool taskStart(Task* task, void (*fx)(void*), void* arg,
    return success;
 }
 
-#if TASK_PREEMPTION
 /****************************************************************************
  *
  ****************************************************************************/
-void _taskPreempt(bool yield)
+void taskExit()
 {
-   Task* task = NULL;
+#if TASK_AT_EXIT && defined(krealloc)
+   while (current->exit.size > 0)
+      current->exit.fx[--current->exit.size]();
+#ifdef kfree
+   kfree(current->exit.fx);
+#endif
+#endif
 
-   _smpLock();
+   while (current->data != NULL)
+      taskSetData(current->data->id, NULL);
 
-   task = taskNext(yield ? current->priority + 1 : current->priority);
+#if TASK_REAPER
+   kernelLock();
+   if (reaper.state == TASK_STATE_SLEEP)
+      taskCancelTimeout(&reaper);
+#else
+   taskReaper(false);
+   kernelLock();
+#endif
 
-   if (task != NULL)
-      taskSwitch(task, TASK_STATE_RUN);
+   for (;;)
+   {
+      Task* task = taskNext(TASK_NUM_PRIORITIES);
 
-   _smpUnlock();
+      if (task != NULL)
+      {
+         current->state = TASK_STATE_END;
+         taskSwitch(task);
+      }
+      else
+      {
+         current->flags |= TASK_FLAG_IDLE;
+
+         kernelUnlock();
+#if !TASK_REAPER
+         taskReaper(true);
+#endif
+         taskIdle();
+         kernelLock();
+
+         current->flags &= ~TASK_FLAG_IDLE;
+      }
+   }
+}
+
+#if TASK_AT_EXIT && defined(krealloc)
+/****************************************************************************
+ *
+ ****************************************************************************/
+int taskAtExit(void (*callback)())
+{
+   unsigned int size = ++current->exit.size * sizeof(void*);
+
+   current->exit.fx = krealloc(current->exit.fx, size);
+   current->exit.fx[current->exit.size - 1] = callback;
+
+   return 0;
 }
 #endif
 
@@ -610,7 +658,7 @@ void _taskPreempt(bool yield)
 void taskSleep(unsigned long ticks)
 {
    kernelLock();
-   taskTimeout(TASK_STATE_SLEEP, ticks);
+   taskSetTimeout(TASK_STATE_SLEEP, ticks);
    kernelUnlock();
 }
 
@@ -622,36 +670,36 @@ static void __taskPriority(Task* task, unsigned char priority)
    if (task == NULL)
       task = current;
 
+   if (task->priority == priority)
+      return;
+
    switch (task->state)
    {
       case TASK_STATE_READY:
       {
          Task* previous = NULL;
-         Task* _task = hReady[task->priority];
+         Task* ptr = ready[task->priority].head;
 
-         while (_task != NULL)
+         while (ptr != NULL)
          {
-            if (_task == task)
+            if (ptr == task)
             {
                if (previous != NULL)
-               {
                   previous->next = task->next;
-
-                  if (task->next == NULL)
-                     tReady[task->priority] = previous;
-               }
                else
-               {
-                  hReady[task->priority] = task->next;
-               }
+                  ready[task->priority].head = task->next;
+
+               if (task->next == NULL)
+                  ready[task->priority].tail = previous;
 
                task->priority = priority;
+
                taskSetReady(task);
                break;
             }
 
-            previous = _task;
-            _task = _task->next;
+            previous = ptr;
+            ptr = ptr->next;
          }
 
          break;
@@ -665,24 +713,24 @@ static void __taskPriority(Task* task, unsigned char priority)
 #if QUEUES
       case TASK_STATE_QUEUE:
          task->priority = priority;
-         queueDelWait(task->wait.type, task);
-         queueAddWait(task->wait.type, task);
+         if (queueDelTask(task->inactive.arg0, task))
+            queueAddTask(task->inactive.arg0, task);
          break;
 #endif
 
 #if SEMAPHORES
       case TASK_STATE_SEMAPHORE:
          task->priority = priority;
-         semaphoreDelWait(task->wait.type, task);
-         semaphoreAddWait(task->wait.type, task);
+         if (semaphoreDelTask(task->inactive.arg0, task))
+            semaphoreAddTask(task->inactive.arg0, task);
          break;
 #endif
 
 #if MUTEXES
       case TASK_STATE_MUTEX:
          task->priority = priority;
-         mutexDelWait(task->wait.type, task);
-         mutexAddWait(task->wait.type, task);
+         if (mutexDelTask(task->inactive.arg0, task))
+            mutexAddTask(task->inactive.arg0, task);
          break;
 #endif
    }
@@ -710,7 +758,7 @@ void taskPriority(Task* task, unsigned char priority)
    task = taskNext(current->priority);
 
    if (task != NULL)
-      taskSwitch(task, TASK_STATE_RUN);
+      taskSwitch(task);
 
    kernelUnlock();
 }
@@ -720,8 +768,8 @@ void taskPriority(Task* task, unsigned char priority)
  ****************************************************************************/
 bool taskSetData(int id, void* ptr)
 {
-   TaskData* data = current->data;
    TaskData* previous = NULL;
+   TaskData* data = current->data;
 
    while (data != NULL)
    {
@@ -732,76 +780,59 @@ bool taskSetData(int id, void* ptr)
       data = data->next;
    }
 
-   if (ptr != NULL)
+   if (data != NULL)
    {
-      if (data != NULL)
+      if (ptr != NULL)
       {
          data->ptr = ptr;
       }
       else
       {
 #if TASK_NUM_TASKDATA > 0
-         kernelLock();
-
-         if (taskData.head != NULL)
-         {
-            data = taskData.head;
-            taskData.head = taskData.head->next;
-         }
-
-         kernelUnlock();
-#endif
-#ifdef kmalloc
-         if (data == NULL)
-            data = kmalloc(sizeof(TaskData));
-#endif
-         if (data != NULL)
-         {
-            data->id = id;
-            data->ptr = ptr;
-            data->next = NULL;
-
-            if (previous != NULL)
-               previous->next = data;
-            else
-               current->data = data;
-         }
-      }
-   }
-   else if (data != NULL)
-   {
-      if (previous != NULL)
-         previous->next = data->next;
-      else
-         current->data = data->next;
-
-#if TASK_NUM_TASKDATA > 0
-      if ((data >= taskData.data) &&
-          (data < &taskData.data[TASK_NUM_TASKDATA]))
-      {
-         data->next = NULL;
-
-         kernelLock();
-
-         if ((taskData.head == NULL) || (taskData.tail == NULL))
-         {
-            taskData.head = data;
-            taskData.tail = data;
-         }
+         if (previous != NULL)
+            previous->next = data->next;
          else
-         {
-            taskData.tail->next = data;
-            taskData.tail = data;
-         }
+            current->data = data->next;
+
+         data->id = 0;
+         data->ptr = NULL;
+
+         kernelLock();
+
+         data->next = taskData.head;
+         taskData.head = data;
 
          kernelUnlock();
-      }
-      else
-#endif
-      {
-#ifdef kfree
+#elif defined(kmalloc) && defined(kfree)
          kfree(data);
 #endif
+      }
+   }
+   else if (ptr != NULL)
+   {
+#if TASK_NUM_TASKDATA > 0
+      kernelLock();
+
+      if (taskData.head != NULL)
+      {
+         data = taskData.head;
+         taskData.head = taskData.head->next;
+      }
+
+      kernelUnlock();
+#elif defined(kmalloc)
+      data = kmalloc(sizeof(TaskData));
+#endif
+      if (data != NULL)
+      {
+         data->id = id;
+         data->ptr = ptr;
+         data->next = NULL;
+
+         if (previous != NULL)
+            previous->next = data;
+         else
+            current->data = data;
       }
    }
 
@@ -826,73 +857,228 @@ void* taskGetData(int id)
    return NULL;
 }
 
+#if TASK_PREEMPTION
+/****************************************************************************
+ *
+ ****************************************************************************/
+void _taskPreempt(bool yield)
+{
+   _smpLock();
+
+   Task* task = taskNext(yield ? current->priority + 1 : current->priority);
+
+   if (task != NULL)
+      taskSwitch(task);
+
+   _smpUnlock();
+}
+#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void _taskTick(unsigned long _ticks)
+{
+   unsigned long ticks = _ticks;
+
+   if (ticks == -1)
+      return;
+
+   _smpLock();
+
+   while (inactive != NULL)
+   {
+      if (inactive->inactive.timeout <= ticks)
+      {
+         Task* task = inactive;
+         inactive = inactive->next;
+
+         ticks -= task->inactive.timeout;
+
+         if (task->flags & TASK_FLAG_IDLE)
+         {
+            task->state = TASK_STATE_RUN;
+#ifdef SMP
+            if (task->cpu != (unsigned char) cpuID())
+               cpuWake((int) task->cpu);
+#endif
+         }
+         else
+         {
+            taskSetReady(task);
+         }
+      }
+      else
+      {
+         if (inactive->inactive.timeout != -1)
+            inactive->inactive.timeout -= ticks;
+
+         break;
+      }
+   }
+
+#if TIMERS
+   ticks = _ticks;
+
+   struct
+   {
+      Timer* head;
+      Timer* tail;
+
+   } async = {NULL, NULL};
+
+   while (timers != NULL)
+   {
+      if (timers->timeout[0] <= ticks)
+      {
+         Timer* timer = timers;
+         timers = timers->next;
+
+         ticks -= timer->timeout[0];
+
+         timer->timeout[0] = timer->timeout[1];
+         timer->next = NULL;
+
+         if (timer->flags & TIMER_FLAG_EXPIRED)
+            timer->flags |= TIMER_FLAG_OVERFLOW;
+         else
+            timer->flags |= TIMER_FLAG_EXPIRED;
+
+         if (timer->fx != NULL)
+         {
+            if (timer->task != NULL)
+            {
+               void (*fx)(void*) = (void (*)(void*)) timer->fx;
+
+               if (!__taskStart(timer->task, fx, timer))
+               {
+                  timer->task->flags |= TASK_FLAG_RESTART;
+                  timer->task->start.fx = fx;
+                  timer->task->start.arg = timer;
+               }
+
+               if (timer->flags & TIMER_FLAG_PERIODIC)
+                  __timerAdd(timer);
+            }
+            else
+            {
+               if (async.head != NULL)
+               {
+                  async.tail->next = timer;
+                  async.tail = timer;
+               }
+               else
+               {
+                  async.head = timer;
+                  async.tail = timer;
+               }
+            }
+         }
+         else if (timer->flags & TIMER_FLAG_PERIODIC)
+         {
+            __timerAdd(timer);
+         }
+      }
+      else
+      {
+         timers->timeout[0] -= ticks;
+         break;
+      }
+   }
+
+   while (async.head != NULL)
+   {
+      Timer* timer = async.head;
+      async.head = async.head->next;
+
+      _smpUnlock();
+      timer->fx(timer);
+      _smpLock();
+
+      if (timer->flags & TIMER_FLAG_PERIODIC)
+         __timerAdd(timer);
+   }
+#endif
+
+   taskScheduleTick(false, taskGetTimeout());
+   _smpUnlock();
+}
+
 #if TASK_LIST
 /****************************************************************************
  *
  ****************************************************************************/
-static void _taskList(Task* task, int cpu)
+static void taskPrint(Task* task)
 {
    const char* state = NULL;
-   const char* wait = NULL;
+   const char* inactive = NULL;
    unsigned long timeout = -1;
 
-   printf("%-20s", task->name);
+   printf("%-18s", task->name);
 
    switch (task->state)
    {
-      case TASK_STATE_READY:
-         state = "ready";
+      case TASK_STATE_INIT:
+         state = "init";
+         break;
+
+      case TASK_STATE_END:
+         state = "end";
          break;
 
       case TASK_STATE_RUN:
          state = "run";
          break;
 
+      case TASK_STATE_READY:
+         state = "ready";
+         break;
+
       case TASK_STATE_SLEEP:
          state = "sleep";
-         timeout = task->wait.timeout;
+         timeout = task->inactive.timeout;
          break;
 
 #if QUEUES
       case TASK_STATE_QUEUE:
          state = "queue";
-         wait = ((Queue*) task->wait.type)->name;
-         timeout = task->wait.timeout;
+         inactive = ((Queue*) task->inactive.arg0)->name;
+         timeout = task->inactive.timeout;
          break;
 #endif
 
 #if SEMAPHORES
       case TASK_STATE_SEMAPHORE:
          state = "semaphore";
-         wait = ((Semaphore*) task->wait.type)->name;
-         timeout = task->wait.timeout;
+         inactive = ((Semaphore*) task->inactive.arg0)->name;
+         timeout = task->inactive.timeout;
          break;
 #endif
 
 #if MUTEXES
       case TASK_STATE_MUTEX:
          state = "mutex";
-         wait = ((Mutex*) task->wait.type)->name;
-         timeout = task->wait.timeout;
+         inactive = ((Mutex*) task->inactive.arg0)->name;
+         timeout = task->inactive.timeout;
          break;
 #endif
-
-      case TASK_STATE_END:
-         state = "end";
-         break;
    }
 
-   if (cpu < 0)
-      printf("%-10s", state);
-   else
-      printf("%s/%-6d", state, cpu);
+#ifdef SMP
+   int i = printf("%s/%d", state, task->cpu);
+   while (i++ < 12)
+      putchar(' ');
+#else
+   printf("%-12s", state);
+#endif
 
    printf("%-5u", task->priority);
+   printf("%-5x", task->flags);
 
-   if (wait == NULL)
-      wait = "";
-
-   printf("%-20s", wait);
+   if (inactive != NULL)
+      printf("%-17s", inactive);
+   else
+      printf("%-17s", "");
 
    if (timeout != -1)
       printf("%-10lu", timeout);
@@ -912,46 +1098,51 @@ static void _taskList(Task* task, int cpu)
 void taskList()
 {
    Task* task = NULL;
-   unsigned char i;
+   int i;
 
    kernelLock();
 
-   printf("%-20s%-10s%-5s%-20s%-10s", "NAME", "STATE", "PRI", "WAIT",
-          "TIMEOUT");
-
+   printf("%-18s%-12s%-5s%-5s%-17s%-10s", "NAME", "STATE", "PRI", "FLG",
+          "WAIT", "TIMEOUT");
 #if TASK_STACK_USAGE
    printf("STACK");
 #endif
-
    printf("\n");
+
+   taskPrint(current);
 
 #ifdef SMP
    for (i = 0; i < SMP; i++)
    {
-      if (_current[i]->state == TASK_STATE_RUN)
-         _taskList(_current[i], i);
+      if ((i != (int) cpuID()) && (_current[i]->state == TASK_STATE_RUN))
+         taskPrint(_current[i]);
    }
-#else
-   if (current->state == TASK_STATE_RUN)
-      _taskList(current, -1);
 #endif
 
    for (i = 0; i < TASK_NUM_PRIORITIES; i++)
    {
-      task = hReady[i];
+      task = ready[i].head;
 
       while (task != NULL)
       {
-         _taskList(task, -1);
+         taskPrint(task);
          task = task->next;
       }
    }
 
-   task = waiting;
+   task = inactive;
 
    while (task != NULL)
    {
-      _taskList(task, -1);
+      taskPrint(task);
+      task = task->next;
+   }
+
+   task = reap;
+
+   while (task != NULL)
+   {
+      taskPrint(task);
       task = task->next;
    }
 
@@ -959,279 +1150,38 @@ void taskList()
 }
 #endif
 
-#if TASK_AT_EXIT && defined(kmalloc)
-/****************************************************************************
- *
- ****************************************************************************/
-int taskAtExit(void (*callback)())
-{
-   void (**fx)() = kmalloc((current->exit.size + 1) * sizeof(void (*)()));
-   unsigned int i;
-
-   fx[current->exit.size] = callback;
-
-   for (i = 0; i < current->exit.size; i++)
-      fx[i] = current->exit.fx[i];
-
-#ifdef kfree
-   kfree(current->exit.fx);
-#endif
-
-   current->exit.fx = fx;
-   current->exit.size++;
-
-   return 0;
-}
-#endif
-
-/****************************************************************************
- *
- ****************************************************************************/
-void NORETURN taskExit()
-{
-#if TASK_AT_EXIT
-   while (current->exit.size > 0)
-      current->exit.fx[--current->exit.size]();
-#ifdef kfree
-   kfree(current->exit.fx);
-#endif
-#endif
-
-   while (current->data != NULL)
-      taskSetData(current->data->id, NULL);
-
-   kernelLock();
-
-   for (;;)
-   {
-      Task* task = taskNext(TASK_NUM_PRIORITIES);
-#ifdef SMP
-      int i;
-#endif
-      if (task == NULL)
-         task = waiting;
-#ifdef SMP
-      for (i = 0; i < SMP; i++)
-      {
-         if (task == _current[i])
-         {
-            task = NULL;
-            break;
-         }
-      }
-#endif
-      if ((task != NULL) && (task != current))
-      {
-         current->state = TASK_STATE_END;
-
-         if (task->state == TASK_STATE_READY)
-            taskSwitch(task, TASK_STATE_RUN);
-         else
-            taskSwitch(task, task->state);
-      }
-      else
-      {
-         kernelUnlock();
-         taskWait();
-         kernelLock();
-      }
-   }
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-void _taskTick(unsigned long _ticks)
-{
-   unsigned long ticks = _ticks;
-#if TIMERS
-   unsigned long aTicks = 0;
-   Timer* previous = NULL;
-   Timer* timer = NULL;
-   Timer* async = NULL;
-#endif
-
-   _smpLock();
-
-   while (waiting != NULL)
-   {
-      if (waiting->wait.timeout <= ticks)
-      {
-         Task* task = waiting;
-#ifdef SMP
-         int id;
-#endif
-         waiting = waiting->next;
-#ifdef SMP
-         for (id = 0; id < SMP; id++)
-         {
-            if (task == _current[id])
-            {
-               task->state = TASK_STATE_RUN;
-               task->next = NULL;
-
-               if (id != cpuID())
-                  smpWake(id);
-
-               break;
-            }
-         }
-
-         if (id == SMP)
-            taskSetReady(task);
-#else
-         if (task == current)
-         {
-            task->state = TASK_STATE_RUN;
-            task->next = NULL;
-         }
-         else
-         {
-            taskSetReady(task);
-         }
-#endif
-         ticks = 0;
-      }
-      else
-      {
-         if (waiting->wait.timeout != -1)
-            waiting->wait.timeout -= ticks;
-
-         break;
-      }
-   }
-
-#if TIMERS
-   ticks = _ticks;
-   timer = timers[1];
-
-   while (timer != NULL)
-   {
-      Timer* next = timer->next;
-
-      aTicks += timer->ticks[0];
-
-      if (__taskStart(timer->task, (void (*)(void*)) timer->fx, timer,
-                      timer->priority))
-      {
-         if (timer->flags & TIMER_FLAG_PERIODIC)
-            __timerAdd(0, timer, aTicks);
-
-         if (timer != timers[1])
-            previous->next = next;
-         else
-            timers[1] = next;
-      }
-      else if (timer->ticks[0] <= ticks)
-      {
-         if (timer->flags & TIMER_FLAG_PERIODIC)
-            timer->flags |= TIMER_FLAG_OVERFLOW;
-
-         timer->ticks[0] = 0;
-         previous = timer;
-         ticks = 0;
-      }
-      else
-      {
-         timer->ticks[0] -= ticks;
-         break;
-      }
-
-      timer = next;
-   }
-
-   ticks = _ticks;
-   timer = timers[0];
-
-   while (timer != NULL)
-   {
-      if (timer->ticks[0] <= ticks)
-      {
-         Timer* next = timer->next;
-
-         timers[0] = next;
-         timer->ticks[0] = 0;
-
-         if (timer->flags & TIMER_FLAG_ASYNC)
-         {
-            timer->next = async;
-            async = timer;
-         }
-         else
-         {
-            timer->task->name = timer->name;
-
-            if (__taskStart(timer->task, (void (*)(void*)) timer->fx, timer,
-                            timer->priority))
-            {
-               if (timer->flags & TIMER_FLAG_PERIODIC)
-                  __timerAdd(0, timer, timer->ticks[1]);
-            }
-            else
-            {
-               if (timer->flags & TIMER_FLAG_PERIODIC)
-                  __timerAdd(1, timer, timer->ticks[1]);
-               else
-                  __timerAdd(1, timer, 0);
-            }
-         }
-
-         timer = next;
-         ticks = 0;
-      }
-      else
-      {
-         timer->ticks[0] -= ticks;
-         break;
-      }
-   }
-#endif
-
-   taskSetTimer(true);
-
-   _smpUnlock();
-
-#if TIMERS
-   while (async != NULL)
-   {
-      Timer* next = async->next;
-
-      async->fx(async);
-
-      if (async->flags & TIMER_FLAG_PERIODIC)
-         timerAdd(async, NULL, async->fx, async->ptr, 0, async->ticks[1]);
-
-      async = next;
-   }
-#endif
-}
-
 /****************************************************************************
  *
  ****************************************************************************/
 void taskInit(Task* task, const char* name, unsigned char priority,
               void* stackBase, unsigned long stackSize)
 {
-#if TASK_NUM_TASKDATA > 0
-   unsigned int i;
-
-   taskData.head = &taskData.data[0];
-   taskData.tail = &taskData.data[TASK_NUM_TASKDATA - 1];
-
-   for (i = 0; i < (TASK_NUM_TASKDATA - 1); i++)
-      taskData.data[i].next = &taskData.data[i + 1];
-
-   taskData.data[TASK_NUM_TASKDATA - 1].next = NULL;
-#endif
-
    task->name = name;
    task->state = TASK_STATE_RUN;
+   task->flags = TASK_FLAG_STARTED;
    task->priority = priority;
    task->next = NULL;
 
    _taskInit(task, stackBase, stackSize);
 
    current = task;
+
+#ifdef SMP
+   if (cpuID() == 0)
+#endif
+   {
+#if TASK_NUM_TASKDATA > 0
+      taskData.head = &taskData.data[0];
+
+      for (unsigned int i = 0; i < (TASK_NUM_TASKDATA - 1); i++)
+         taskData.data[i].next = &taskData.data[i + 1];
+
+      taskData.data[TASK_NUM_TASKDATA - 1].next = NULL;
+#endif
+#if TASK_REAPER
+      __taskStart(&reaper, taskReaperFx, NULL);
+#endif
+   }
 }
 
 #if TIMERS
@@ -1239,14 +1189,16 @@ void taskInit(Task* task, const char* name, unsigned char priority,
 /****************************************************************************
  *
  ****************************************************************************/
-Timer* timerCreate(const char* name, unsigned char flags)
+Timer* timerCreate(unsigned char flags, unsigned long timeout, Task* task)
 {
    Timer* timer = kmalloc(sizeof(Timer));
 
    memset(timer, 0, sizeof(Timer));
 
-   timer->name = name;
    timer->flags = flags;
+   timer->timeout[0] = timeout;
+   timer->timeout[1] = timeout;
+   timer->task = task;
 
    return timer;
 }
@@ -1265,106 +1217,56 @@ void timerDestroy(Timer* timer)
 /****************************************************************************
  *
  ****************************************************************************/
-static void __timerAdd(int list, Timer* _timer, unsigned long ticks)
+static void __timerAdd(Timer* timer)
 {
    Timer* previous = NULL;
-   Timer* timer = timers[list];
+   Timer* ptr = timers;
 
-   if (ticks == 0)
-      ticks = 1;
+   if (timer->timeout[0] == 0)
+      timer->timeout[0] = 1;
+   if (timer->timeout[1] == 0)
+      timer->timeout[1] = 1;
 
-   while (timer != NULL)
+   while (ptr != NULL)
    {
-      if (ticks < timer->ticks[0])
+      if (timer->timeout[0] < ptr->timeout[0])
       {
-         timer->ticks[0] -= ticks;
+         ptr->timeout[0] -= timer->timeout[0];
          break;
       }
       else
       {
-         ticks -= timer->ticks[0];
+         timer->timeout[0] -= ptr->timeout[0];
       }
 
-      previous = timer;
-      timer = timer->next;
+      previous = ptr;
+      ptr = ptr->next;
    }
 
-   _timer->ticks[0] = ticks;
-   _timer->next = timer;
+   timer->next = ptr;
 
    if (previous != NULL)
-      previous->next = _timer;
+      previous->next = timer;
    else
-      timers[list] = _timer;
+      timers = timer;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void __timerCancel(Timer* _timer)
-{
-   Timer* timer = timers[0];
-   Timer* previous = NULL;
-   bool found = false;
-
-   while (!found && (timer != NULL))
-   {
-      if (timer == _timer)
-      {
-         if (timer->next != NULL)
-            timer->next->ticks[0] += timer->ticks[0];
-
-         if (previous != NULL)
-            previous->next = timer->next;
-         else
-            timers[0] = timer->next;
-
-         found = true;
-      }
-
-      previous = timer;
-      timer = timer->next;
-   }
-
-   previous = NULL;
-   timer = timers[1];
-
-   while (!found && (timer != NULL))
-   {
-      if (timer == _timer)
-      {
-         if (timer->next != NULL)
-            timer->next->ticks[0] += timer->ticks[0];
-
-         if (previous != NULL)
-            previous->next = timer->next;
-         else
-            timers[1] = timer->next;
-
-         found = true;
-      }
-
-      previous = timer;
-      timer = timer->next;
-   }
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-void _timerAdd(Timer* timer, Task* task, void (*fx)(Timer*), void* ptr,
-               unsigned char priority, unsigned long ticks)
+void _timerAdd(Timer* timer, void (*fx)(Timer*), void* arg)
 {
    _smpLock();
 
-   timer->task = task;
    timer->fx = fx;
-   timer->ptr = ptr;
-   timer->ticks[1] = ticks;
-   timer->priority = priority;
+   timer->arg = arg;
 
-   __timerAdd(0, timer, ticks);
-   taskSetTimer(false);
+   unsigned long timeout0 = taskGetTimeout();
+   __timerAdd(timer);
+   unsigned long timeout1 = taskGetTimeout();
+
+   if (timeout1 < timeout0)
+      taskAdjTimeout(taskScheduleTick(timeout0 != -1, timeout1));
 
    _smpUnlock();
 }
@@ -1372,21 +1274,80 @@ void _timerAdd(Timer* timer, Task* task, void (*fx)(Timer*), void* ptr,
 /****************************************************************************
  *
  ****************************************************************************/
-void timerAdd(Timer* timer, Task* task, void (*fx)(Timer*), void* ptr,
-              unsigned char priority, unsigned long ticks)
+void timerAdd(Timer* timer, void (*fx)(Timer*), void* arg)
 {
    kernelLock();
 
-   timer->task = task;
    timer->fx = fx;
-   timer->ptr = ptr;
-   timer->ticks[1] = ticks;
-   timer->priority = priority;
+   timer->arg = arg;
 
-   __timerAdd(0, timer, ticks);
-   taskSetTimer(false);
+   unsigned long timeout0 = taskGetTimeout();
+   __timerAdd(timer);
+   unsigned long timeout1 = taskGetTimeout();
+
+   if (timeout1 < timeout0)
+      taskAdjTimeout(taskScheduleTick(timeout0 != -1, timeout1));
 
    kernelUnlock();
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void __timerCancel(Timer* timer)
+{
+   Timer* previous = NULL;
+   Timer* ptr = timers;
+
+   while (ptr != NULL)
+   {
+      if (ptr == timer)
+      {
+         if (timer->next != NULL)
+            timer->next->timeout[0] += timer->timeout[0];
+
+         if (previous != NULL)
+            previous->next = timer->next;
+         else
+            timers = timer->next;
+
+         if ((timer->flags & TIMER_FLAG_EXPIRED) && (timer->task != NULL))
+         {
+            timer->task->flags &= ~TASK_FLAG_RESTART;
+
+            if ((timer->task->state == TASK_STATE_READY) &&
+                ((timer->task->flags & TASK_FLAG_STARTED) == 0))
+            {
+               Task* previous = NULL;
+               Task* ptr = ready[timer->task->priority].head;
+
+               while (ptr != NULL)
+               {
+                  if (ptr == timer->task)
+                  {
+                     if (previous != NULL)
+                        previous->next = timer->task->next;
+                     else
+                        ready[timer->task->priority].head = timer->task->next;
+
+                     if (timer->task->next == NULL)
+                        ready[timer->task->priority].tail = previous;
+
+                     break;
+                  }
+
+                  previous = ptr;
+                  ptr = ptr->next;
+               }
+            }
+         }
+
+         break;
+      }
+
+      previous = ptr;
+      ptr = ptr->next;
+   }
 }
 
 /****************************************************************************
@@ -1448,18 +1409,6 @@ void queueDestroy(Queue* queue)
 typedef struct
 {
    Queue* queue;
-   bool tail;
-   const void* src;
-   bool success;
-
-} Enqueue;
-
-/****************************************************************************
- *
- ****************************************************************************/
-typedef struct
-{
-   Queue* queue;
    bool peek;
    void* dst;
    bool success;
@@ -1479,7 +1428,7 @@ static bool __queuePush(Queue* queue, bool tail, const void* src)
 
       while ((queue->task != NULL) && insert)
       {
-         Dequeue* dequeue = queue->task->wait.ptr;
+         Dequeue* dequeue = queue->task->inactive.arg1;
 
          if (dequeue->dst != NULL)
             memcpy(dequeue->dst, src, queue->size);
@@ -1488,7 +1437,7 @@ static bool __queuePush(Queue* queue, bool tail, const void* src)
          dequeue->success = true;
 
          taskCancelTimeout(queue->task);
-         queue->task = queue->task->wait.next;
+         queue->task = queue->task->inactive.next;
       }
 
       if (insert)
@@ -1515,6 +1464,18 @@ static bool __queuePush(Queue* queue, bool tail, const void* src)
 /****************************************************************************
  *
  ****************************************************************************/
+typedef struct
+{
+   Queue* queue;
+   bool tail;
+   const void* src;
+   bool success;
+
+} Enqueue;
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 static bool __queuePop(Queue* queue, bool head, bool peek, void* dst)
 {
    bool success = false;
@@ -1525,7 +1486,7 @@ static bool __queuePop(Queue* queue, bool head, bool peek, void* dst)
 
       if ((queue->task != NULL) && !peek)
       {
-         Enqueue* enqueue = queue->task->wait.ptr;
+         Enqueue* enqueue = queue->task->inactive.arg1;
 
          if (head)
          {
@@ -1561,7 +1522,7 @@ static bool __queuePop(Queue* queue, bool head, bool peek, void* dst)
          enqueue->success = true;
 
          taskCancelTimeout(queue->task);
-         queue->task = queue->task->wait.next;
+         queue->task = queue->task->inactive.next;
       }
       else
       {
@@ -1595,12 +1556,62 @@ static bool __queuePop(Queue* queue, bool head, bool peek, void* dst)
 /****************************************************************************
  *
  ****************************************************************************/
+static void queueAddTask(Queue* queue, Task* task)
+{
+   Task* previous = NULL;
+   Task* ptr = queue->task;
+
+   while (ptr != NULL)
+   {
+      if (task->priority < ptr->priority)
+         break;
+
+      previous = ptr;
+      ptr = ptr->inactive.next;
+   }
+
+   task->inactive.next = ptr;
+
+   if (previous != NULL)
+      previous->inactive.next = task;
+   else
+      queue->task = task;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static bool queueDelTask(Queue* queue, Task* task)
+{
+   Task* previous = NULL;
+   Task* ptr = queue->task;
+
+   while (ptr != NULL)
+   {
+      if (ptr == task)
+      {
+         if (previous != NULL)
+            previous->inactive.next = task->inactive.next;
+         else
+            queue->task = task->inactive.next;
+
+         return true;
+      }
+
+      previous = ptr;
+      ptr = ptr->inactive.next;
+   }
+
+   return false;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 bool _queuePush(Queue* queue, bool tail, const void* src)
 {
-   bool success;
-
    _smpLock();
-   success = __queuePush(queue, tail, src);
+   bool success = __queuePush(queue, tail, src);
    _smpUnlock();
 
    return success;
@@ -1611,33 +1622,31 @@ bool _queuePush(Queue* queue, bool tail, const void* src)
  ****************************************************************************/
 bool queuePush(Queue* queue, bool tail, const void* src, unsigned long ticks)
 {
-   bool success;
-
    kernelLock();
 
-   success = __queuePush(queue, tail, src);
+   bool success = __queuePush(queue, tail, src);
 
    if (success)
    {
       Task* task = taskNext(current->priority);
 
       if (task != NULL)
-         taskSwitch(task, TASK_STATE_RUN);
+         taskSwitch(task);
    }
    else if (ticks > 0)
    {
       Enqueue enqueue = {queue, tail, src, false};
 
-      current->wait.type = queue;
-      current->wait.ptr = &enqueue;
+      current->inactive.arg0 = queue;
+      current->inactive.arg1 = &enqueue;
 
-      queueAddWait(queue, current);
-      taskTimeout(TASK_STATE_QUEUE, ticks);
+      queueAddTask(queue, current);
+      taskSetTimeout(TASK_STATE_QUEUE, ticks);
 
       if (enqueue.success)
          success = true;
       else
-         queueDelWait(queue, current);
+         queueDelTask(queue, current);
    }
 
    kernelUnlock();
@@ -1650,10 +1659,8 @@ bool queuePush(Queue* queue, bool tail, const void* src, unsigned long ticks)
  ****************************************************************************/
 bool _queuePop(Queue* queue, bool head, bool peek, void* dst)
 {
-   bool success;
-
    _smpLock();
-   success = __queuePop(queue, head, peek, dst);
+   bool success = __queuePop(queue, head, peek, dst);
    _smpUnlock();
 
    return success;
@@ -1665,33 +1672,36 @@ bool _queuePop(Queue* queue, bool head, bool peek, void* dst)
 bool queuePop(Queue* queue, bool head, bool peek, void* dst,
               unsigned long ticks)
 {
-   bool success;
-
    kernelLock();
 
-   success = __queuePop(queue, head, peek, dst);
+   bool success = __queuePop(queue, head, peek, dst);
 
    if (success)
    {
       Task* task = taskNext(current->priority);
 
       if (task != NULL)
-         taskSwitch(task, TASK_STATE_RUN);
+         taskSwitch(task);
    }
    else if (ticks > 0)
    {
-      Dequeue dequeue = {queue, peek, dst, false};
+      Dequeue dequeue;
 
-      current->wait.type = queue;
-      current->wait.ptr = &dequeue;
+      dequeue.queue = queue;
+      dequeue.peek = peek;
+      dequeue.dst = dst;
+      dequeue.success = false;
 
-      queueAddWait(queue, current);
-      taskTimeout(TASK_STATE_QUEUE, ticks);
+      current->inactive.arg0 = queue;
+      current->inactive.arg1 = &dequeue;
+
+      queueAddTask(queue, current);
+      taskSetTimeout(TASK_STATE_QUEUE, ticks);
 
       if (dequeue.success)
          success = true;
       else
-         queueDelWait(queue, current);
+         queueDelTask(queue, current);
    }
 
    kernelUnlock();
@@ -1738,10 +1748,9 @@ static bool __semaphoreGive(Semaphore* semaphore)
 
    if (semaphore->task != NULL)
    {
-      *(bool*) semaphore->task->wait.ptr = true;
-
+      *(bool*) semaphore->task->inactive.arg1 = true;
       taskCancelTimeout(semaphore->task);
-      semaphore->task = semaphore->task->wait.next;
+      semaphore->task = semaphore->task->inactive.next;
    }
    else if (semaphore->count < semaphore->max)
    {
@@ -1753,6 +1762,92 @@ static bool __semaphoreGive(Semaphore* semaphore)
    }
 
    return success;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+bool _semaphoreGive(Semaphore* semaphore)
+{
+   _smpLock();
+   bool success = __semaphoreGive(semaphore);
+   _smpUnlock();
+
+   return success;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+bool semaphoreGive(Semaphore* semaphore)
+{
+   kernelLock();
+
+   bool success = __semaphoreGive(semaphore);
+
+   if (success)
+   {
+      Task* task = taskNext(current->priority);
+
+      if (task != NULL)
+         taskSwitch(task);
+   }
+
+   kernelUnlock();
+
+   return success;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void semaphoreAddTask(Semaphore* semaphore, Task* task)
+{
+   Task* previous = NULL;
+   Task* ptr = semaphore->task;
+
+   while (ptr != NULL)
+   {
+      if (task->priority < ptr->priority)
+         break;
+
+      previous = ptr;
+      ptr = ptr->inactive.next;
+   }
+
+   task->inactive.next = ptr;
+
+   if (previous != NULL)
+      previous->inactive.next = task;
+   else
+      semaphore->task = task;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static bool semaphoreDelTask(Semaphore* semaphore, Task* task)
+{
+   Task* previous = NULL;
+   Task* ptr = semaphore->task;
+
+   while (task != NULL)
+   {
+      if (ptr == task)
+      {
+         if (previous != NULL)
+            previous->inactive.next = task->inactive.next;
+         else
+            semaphore->task = task->inactive.next;
+
+         return true;
+      }
+
+      previous = ptr;
+      ptr = ptr->inactive.next;
+   }
+
+   return false;
 }
 
 /****************************************************************************
@@ -1771,52 +1866,14 @@ bool semaphoreTake(Semaphore* semaphore, unsigned long ticks)
    }
    else if (ticks > 0)
    {
-      current->wait.type = semaphore;
-      current->wait.ptr = &success;
+      current->inactive.arg0 = semaphore;
+      current->inactive.arg1 = &success;
 
-      semaphoreAddWait(semaphore, current);
-      taskTimeout(TASK_STATE_SEMAPHORE, ticks);
+      semaphoreAddTask(semaphore, current);
+      taskSetTimeout(TASK_STATE_SEMAPHORE, ticks);
 
       if (!success)
-         semaphoreDelWait(semaphore, current);
-   }
-
-   kernelUnlock();
-
-   return success;
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-bool _semaphoreGive(Semaphore* semaphore)
-{
-   bool success;
-
-   _smpLock();
-   success = __semaphoreGive(semaphore);
-   _smpUnlock();
-
-   return success;
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-bool semaphoreGive(Semaphore* semaphore)
-{
-   bool success;
-
-   kernelLock();
-
-   success = __semaphoreGive(semaphore);
-
-   if (success)
-   {
-      Task* task = taskNext(current->priority);
-
-      if (task != NULL)
-         taskSwitch(task, TASK_STATE_RUN);
+         semaphoreDelTask(semaphore, current);
    }
 
    kernelUnlock();
@@ -1857,6 +1914,58 @@ void mutexDestroy(Mutex* mutex)
 /****************************************************************************
  *
  ****************************************************************************/
+static void mutexAddTask(Mutex* mutex, Task* task)
+{
+   Task* previous = NULL;
+   Task* ptr = mutex->task;
+
+   while (ptr != NULL)
+   {
+      if (task->priority < ptr->priority)
+         break;
+
+      previous = ptr;
+      ptr = ptr->inactive.next;
+   }
+
+   task->inactive.next = ptr;
+
+   if (previous != NULL)
+      previous->inactive.next = task;
+   else
+      mutex->task = task;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static bool mutexDelTask(Mutex* mutex, Task* task)
+{
+   Task* previous = NULL;
+   Task* ptr = mutex->task;
+
+   while (ptr != NULL)
+   {
+      if (ptr == task)
+      {
+         if (previous != NULL)
+            previous->inactive.next = task->inactive.next;
+         else
+            mutex->task = task->inactive.next;
+
+         return true;
+      }
+
+      previous = ptr;
+      ptr = ptr->inactive.next;
+   }
+
+   return false;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 bool mutexLock(Mutex* mutex, unsigned long ticks)
 {
    bool success = false;
@@ -1865,9 +1974,9 @@ bool mutexLock(Mutex* mutex, unsigned long ticks)
 
    if (mutex->count == 0)
    {
+      mutex->count = 1;
       mutex->priority = current->priority;
       mutex->owner = current;
-      mutex->count = 1;
       success = true;
    }
    else
@@ -1879,17 +1988,17 @@ bool mutexLock(Mutex* mutex, unsigned long ticks)
       }
       else if (ticks > 0)
       {
-         current->wait.type = mutex;
-         current->wait.ptr = &success;
+         current->inactive.arg0 = mutex;
+         current->inactive.arg1 = &success;
 
          if (current->priority < mutex->owner->priority)
             __taskPriority(mutex->owner, current->priority);
 
-         mutexAddWait(mutex, current);
-         taskTimeout(TASK_STATE_MUTEX, ticks);
+         mutexAddTask(mutex, current);
+         taskSetTimeout(TASK_STATE_MUTEX, ticks);
 
          if (!success)
-            mutexDelWait(mutex, current);
+            mutexDelTask(mutex, current);
       }
    }
 
@@ -1912,23 +2021,21 @@ void mutexUnlock(Mutex* mutex)
    {
       if (mutex->task != NULL)
       {
-         Task* task = NULL;
-
          __taskPriority(current, mutex->priority);
 
-         *(bool*) mutex->task->wait.ptr = true;
+         *(bool*) mutex->task->inactive.arg1 = true;
 
          taskCancelTimeout(mutex->task);
 
          mutex->count = 1;
          mutex->priority = mutex->task->priority;
          mutex->owner = mutex->task;
-         mutex->task = mutex->task->wait.next;
+         mutex->task = mutex->task->inactive.next;
 
-         task = taskNext(current->priority);
+         Task* task = taskNext(current->priority);
 
          if (task != NULL)
-            taskSwitch(task, TASK_STATE_RUN);
+            taskSwitch(task);
       }
       else
       {

@@ -43,8 +43,9 @@
 /****************************************************************************
  *
  ****************************************************************************/
-#define ESCAPE  1 /* CTRL-A */
+#define ESCAPE 1 /* CTRL-A */
 #define EXIT   'x'
+#define GDB    0
 
 /****************************************************************************
  *
@@ -87,7 +88,7 @@ static void* avrThread(void* arg)
 
    avr_irq_register_notify(irq, irqOutput, NULL);
 
-#if 0
+#if GDB
    avr->gdb_port = 1234;
    avr->state = cpu_Stopped;
    avr_gdb_init(avr);

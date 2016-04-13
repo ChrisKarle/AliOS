@@ -58,8 +58,10 @@ debug: $(ELF_FILE)
 ##############################################################################
 #
 ##############################################################################
-#C_FLAGS = -g -Wall -Wno-main -Wno-address -mcpu=rx600 -nostdinc
-C_FLAGS = -Os -Wall -Wno-main -Wno-address -mcpu=rx600 -nostdinc
+#C_FLAGS = -g -Wall -Wno-main -Wno-address -mcpu=rx600 \
+#          -msave-acc-in-interrupts -nostdinc -std=c99
+C_FLAGS = -Os -Wall -Wno-main -Wno-address -mcpu=rx600 \
+          -msave-acc-in-interrupts -nostdinc -std=c99
 LD_FLAGS = -nostdlib -Wl,-loptc -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I$(TOOLCHAIN_PATH)/rx-elf/optlibinc -I.
 C_FILES = board.c

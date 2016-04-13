@@ -59,7 +59,16 @@ static bool tx(CharDev* dev, int c)
    {
       unsigned char c8;
 
-      if (interruptsEnabled())
+      if (kernelLocked())
+      {
+         while (UARTFR(pl011) & 0x0020);
+         while (_queuePop(pl011->queue.tx, true, false, &c8))
+         {
+            UART0DR(pl011) = c8;
+            while (UARTFR(pl011) & 0x0020);
+         }
+      }
+      else
       {
          c8 = (unsigned char) c;
 
@@ -70,17 +79,6 @@ static bool tx(CharDev* dev, int c)
          }
 
          return false;
-      }
-      else
-      {
-#if 0
-         while (UARTFR(pl011) & 0x0020);
-         while (_queuePop(pl011->queue.tx, true, false, &c8))
-         {
-            UART0DR(pl011) = c8;
-            while (UARTFR(pl011) & 0x0020);
-         }
-#endif
       }
    }
 
@@ -102,19 +100,17 @@ static int rx(CharDev* dev, bool blocking)
    {
       unsigned char c8;
 
-      if (interruptsEnabled())
+      if (kernelLocked())
+      {
+         if (_queuePop(pl011->queue.rx, true, false, &c8))
+            c = c8;
+      }
+      else
       {
          unsigned long timeout = blocking ? pl011->dev.timeout.rx : 0;
 
          if (queuePop(pl011->queue.rx, true, false, &c8, timeout))
             c = c8;
-      }
-      else
-      {
-#if 0
-         if (_queuePop(pl011->queue.rx, true, false, &c8))
-            c = c8;
-#endif
       }
    }
 

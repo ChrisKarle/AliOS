@@ -27,6 +27,7 @@
  ****************************************************************************/
 #include <stdint.h>
 #include <string.h>
+#include "kernel.h"
 #include "platform.h"
 
 /****************************************************************************
@@ -37,7 +38,7 @@
 /****************************************************************************
  *
  ****************************************************************************/
-static bool flag = false;
+static bool iFlag = false;
 
 /****************************************************************************
  *
@@ -49,7 +50,7 @@ void __taskSwitch(void** current, void* next);
  ****************************************************************************/
 bool kernelLocked()
 {
-   return flag || !interruptsEnabled();
+   return !interruptsEnabled();
 }
 
 /****************************************************************************
@@ -57,7 +58,7 @@ bool kernelLocked()
  ****************************************************************************/
 void kernelLock()
 {
-   flag = disableInterrupts();
+   iFlag = disableInterrupts();
 }
 
 /****************************************************************************
@@ -65,14 +66,14 @@ void kernelLock()
  ****************************************************************************/
 void kernelUnlock()
 {
-   if (flag)
+   if (iFlag)
       enableInterrupts();
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-void taskSetup(Task* task, void (*fx)(void*, void*), void* arg1, void* arg2)
+void taskSetup(Task* task, void (*fx)())
 {
    uint16_t* stack = (uint16_t*) task->stack.base + task->stack.size / 2;
 
@@ -80,35 +81,15 @@ void taskSetup(Task* task, void (*fx)(void*, void*), void* arg1, void* arg2)
    memset(task->stack.base, STACK_MARKER, task->stack.size);
 #endif
 
-   stack[-1] = (uint16_t) arg2;
-   stack[-2] = (uint16_t) arg1;
-   stack[-3] = 0x0000;
-   stack[-4] = 0x0000;
-   stack[-5] = 0x0000;
-   stack[-6] = (uint16_t) fx;
-   stack[-7] = 0x8600; /* PSW */
-   stack[-8] = 0x0000;
-   stack[-9] = 0x1111;
-   stack[-10] = 0x2222;
-   stack[-11] = 0x3333;
-   stack[-12] = 0x000F;
-#if defined(__RL78_G13__) || defined(__RL78_G14__)
-   stack[-13] = 0x4444;
-   stack[-14] = 0x5555;
-   stack[-15] = 0x6666;
-   stack[-16] = 0x7777;
-   stack[-17] = 0x8888;
-   stack[-18] = 0x9999;
-   stack[-19] = 0xAAAA;
-   stack[-20] = 0xBBBB;
-   stack[-21] = 0xCCCC;
-   stack[-22] = 0xDDDD;
-   stack[-23] = 0xEEEE;
-   stack[-24] = 0xFFFF;
-   task->stack.ptr = stack - 24;
-#else
-   task->stack.ptr = stack - 12;
-#endif
+   stack[-1] = 0x0000;
+   stack[-2] = (uint16_t) fx;
+   stack[-3] = 0x1716;
+   stack[-4] = 0x1514;
+   stack[-5] = 0x1312;
+   stack[-6] = 0x1110;
+   stack[-7] = 0x0600;
+
+   task->stack.ptr = stack - 7;
 }
 
 #if TASK_STACK_USAGE
@@ -130,7 +111,10 @@ unsigned long taskStackUsage(Task* task)
 /****************************************************************************
  *
  ****************************************************************************/
-void _taskEntry(Task* task) {}
+void _taskEntry(Task* task)
+{
+   enableInterrupts();
+}
 
 /****************************************************************************
  *

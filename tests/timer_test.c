@@ -27,25 +27,34 @@
  ****************************************************************************/
 #include <stdio.h>
 #include <stdlib.h>
-#include "board.h"
 #include "kernel.h"
+#include "platform.h"
 #include "timer_test.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-static Timer timer1 = TIMER_CREATE("timer_test1", TIMER_FLAG_PERIODIC);
-static Timer timer2 = TIMER_CREATE("timer_test2", TIMER_FLAG_PERIODIC);
-static Task task1 = TASK_CREATE(NULL, TIMER_TEST1_STACK_SIZE);
-static Task task2 = TASK_CREATE(NULL, TIMER_TEST2_STACK_SIZE);
+static Timer timer1 = TIMER_CREATE(TIMER_FLAG_PERIODIC, 0,
+                                   TASK_CREATE_PTR("timer_task1",
+                                                   TASK_LOW_PRIORITY,
+                                                   TIMER_TEST1_STACK_SIZE));
+static Timer timer2 = TIMER_CREATE(TIMER_FLAG_PERIODIC, 1000,
+                                   TASK_CREATE_PTR("timer_task2",
+                                                   TASK_HIGH_PRIORITY,
+                                                   TIMER_TEST2_STACK_SIZE));
 static unsigned long x[3] = {0, 0, 0};
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void fxTask1(Timer* timer)
+static void taskFx1(Timer* timer)
 {
+   if (kernelLocked())
+      puts("timer error 1");
+
    x[0]++;
+
+   timer->flags &= ~TIMER_FLAG_EXPIRED;
 
    if (timer->flags & TIMER_FLAG_OVERFLOW)
    {
@@ -59,8 +68,13 @@ static void fxTask1(Timer* timer)
 /****************************************************************************
  *
  ****************************************************************************/
-static void fxTask2(Timer* timer)
+static void taskFx2(Timer* timer)
 {
+   timer->flags &= ~TIMER_FLAG_EXPIRED;
+
+   if (kernelLocked())
+      puts("timer error 2");
+
    x[2]++;
 }
 
@@ -77,7 +91,9 @@ void timerTestCmd(int argc, char* argv[])
  ****************************************************************************/
 void timerTest()
 {
-   timerAdd(&timer1, &task1, fxTask1, NULL, TASK_LOW_PRIORITY,
-            rand() % 75 + 25);
-   timerAdd(&timer2, &task2, fxTask2, NULL, TASK_HIGH_PRIORITY, 1000);
+   timer1.timeout[0] = rand() % 90 + 10;
+   timer1.timeout[1] = timer1.timeout[0];
+
+   timerAdd(&timer1, taskFx1, NULL);
+   timerAdd(&timer2, taskFx2, NULL);
 }

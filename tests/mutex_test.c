@@ -29,23 +29,29 @@
 #include <stdlib.h>
 #include "board.h"
 #include "kernel.h"
+#include "platform.h"
 #include "mutex_test.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
 static Mutex mutex = MUTEX_CREATE("mutex_test");
-static Task task1 = TASK_CREATE("mutex_test1", MUTEX_TEST1_STACK_SIZE);
-static Task task2 = TASK_CREATE("mutex_test2", MUTEX_TEST2_STACK_SIZE);
+static Task task1 = TASK_CREATE("mutex_test1", TASK_LOW_PRIORITY,
+                                MUTEX_TEST1_STACK_SIZE);
+static Task task2 = TASK_CREATE("mutex_test2", TASK_HIGH_PRIORITY,
+                                MUTEX_TEST2_STACK_SIZE);
 static unsigned long x[3] = {0, 0, 0};
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void fxTask1(void* arg)
+static void taskFx1(void* arg)
 {
    for (;;)
    {
+      if (kernelLocked())
+         puts("mutex error 1");
+
       mutexLock(&mutex, -1);
 
       x[0]++;
@@ -55,22 +61,25 @@ static void fxTask1(void* arg)
       x[1]++;
 
       if ((mutex.task != NULL) && (task1.priority != TASK_HIGH_PRIORITY))
-         puts("mutex error");
+         puts("mutex error 2");
 
       mutexUnlock(&mutex);
 
       if (task1.priority != TASK_LOW_PRIORITY)
-         puts("mutex error");
+         puts("mutex error 3");
    }
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void fxTask2(void* arg)
+static void taskFx2(void* arg)
 {
    for (;;)
    {
+      if (kernelLocked())
+         puts("mutex error 4");
+
       if (mutexLock(&mutex, rand() % 100))
       {
          x[0]++;
@@ -100,6 +109,6 @@ void mutexTestCmd(int argc, char* argv[])
  ****************************************************************************/
 void mutexTest()
 {
-   taskStart(&task1, fxTask1, NULL, TASK_LOW_PRIORITY);
-   taskStart(&task2, fxTask2, NULL, TASK_HIGH_PRIORITY);
+   taskStart(&task1, taskFx1, NULL);
+   taskStart(&task2, taskFx2, NULL);
 }

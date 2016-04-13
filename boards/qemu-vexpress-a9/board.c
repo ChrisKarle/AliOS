@@ -55,7 +55,6 @@ static SP804 sp804 = SP804_CREATE(0x10011000);
 static HistoryData historyData = HISTORY_DATA(10);
 
 static MMU mmu;
-
 #ifdef SMP
 static Task task0[SMP];
 #else
@@ -86,14 +85,15 @@ static const ShellCmd SHELL_CMDS[] =
 /****************************************************************************
  *
  ****************************************************************************/
-static void taskTick(HWTimer* timer)
+static void timerCallback(HWTimer* timer)
 {
-   _taskTick(1);
+   unsigned long tickClks = sp804.timer.clk / TASK_TICK_HZ;
+   _taskTick(sp804.timer.loadValue / tickClks);
 #if TASK_PREEMPTION
+   _taskPreempt(true);
 #ifdef SMP
    gicSGI(&gic, -1, 1);
 #endif
-   _taskPreempt(true);
 #endif
 }
 
@@ -101,7 +101,7 @@ static void taskTick(HWTimer* timer)
 /****************************************************************************
  *
  ****************************************************************************/
-static void sgiIRQ(unsigned int n, void* arg)
+static void smpIRQ(unsigned int n, void* arg)
 {
 #if TASK_PREEMPTION
    if (n > 0)
@@ -112,20 +112,20 @@ static void sgiIRQ(unsigned int n, void* arg)
 /****************************************************************************
  *
  ****************************************************************************/
-void smpWake(int cpu)
-{
-   gicSGI(&gic, cpu, 0);
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
 static void smpInit()
 {
    void** jmpPtr = (void**) 0x10000030;
    extern unsigned long _smpInit[];
    *jmpPtr = _smpInit;
-   smpWake(-1);
+   cpuWake(-1);
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void _cpuWake(int cpu)
+{
+   gicSGI(&gic, cpu, 0);
 }
 #endif
 
@@ -146,12 +146,36 @@ void mmuFreePage(void* page) {}
 /****************************************************************************
  *
  ****************************************************************************/
-void taskTimer(unsigned long ticks) {}
+unsigned long taskScheduleTick(bool adj, unsigned long ticks)
+{
+   unsigned long tickClks = sp804.timer.clk / TASK_TICK_HZ;
+   unsigned long maxTicks = sp804.timer.max / tickClks;
+   unsigned long elasped = 0;
+   unsigned long remain = 0;
+
+   if (ticks > maxTicks)
+      ticks = maxTicks;
+
+   if (adj)
+   {
+      elasped = sp804.timer.loadValue - sp804.timer.value(&sp804.timer);
+      remain = elasped % tickClks;
+      elasped /= tickClks;
+   }
+
+   if (ticks > 0)
+   {
+      sp804.timer.load(&sp804.timer, ticks * tickClks - remain);
+      sp804.timer.enable(&sp804.timer, true);
+   }
+
+   return elasped;
+}
 
 /****************************************************************************
  *
  ****************************************************************************/
-void taskWait()
+void taskIdle()
 {
    __asm__ __volatile__("wfi");
 }
@@ -179,7 +203,19 @@ void smpMain(void* stack, unsigned long size)
    enableInterrupts();
 
    for (;;)
-      taskSleep(TASK_TICK_HZ);
+   {
+      volatile unsigned long i = rand() % TASK_TICK_HZ;
+
+      if (i & 1)
+      {
+         i *= 1000;
+         while (i-- > 0);
+      }
+      else
+      {
+         taskSleep(i);
+      }
+   }
 }
 #endif
 
@@ -198,19 +234,19 @@ int main(void* vectors, void* stack, unsigned long stackSize)
    gicInit(&gic);
 
    pl011Init(&pl011, 4000000, 115200, PL011_DPS_8N1);
-   gic.ctrl.addHandler(&gic.ctrl, 37, pl011IRQ, &pl011, false, 1 << cpuID());
+   gic.ctrl.addHandler(&gic.ctrl, 37, pl011IRQ, &pl011, false, 1);
    libcInit(&pl011.dev);
 
    sp804Init(&sp804, 1000000);
-   gic.ctrl.addHandler(&gic.ctrl, 34, sp804IRQ, &sp804, true, 1 << cpuID());
-   sp804.timer.callback = taskTick;
-   sp804.timer.periodic = true;
-   sp804.timer.load(&sp804.timer, sp804.timer.clk / TASK_TICK_HZ);
-   sp804.timer.enable(&sp804.timer, true);
+   gic.ctrl.addHandler(&gic.ctrl, 34, sp804IRQ, &sp804, true, 1);
+   sp804.timer.callback = timerCallback;
+   sp804.timer.periodic = false;
 
 #ifdef SMP
-   gic.ctrl.addHandler(&gic.ctrl, 0, sgiIRQ, NULL, true, 0xFF);
-   gic.ctrl.addHandler(&gic.ctrl, 1, sgiIRQ, NULL, true, 0xFF);
+   gic.ctrl.addHandler(&gic.ctrl, 0, smpIRQ, NULL, true, -1);
+#if TASK_PREEMPTION
+   gic.ctrl.addHandler(&gic.ctrl, 1, smpIRQ, NULL, true, -1);
+#endif
    smpInit();
 #endif
 

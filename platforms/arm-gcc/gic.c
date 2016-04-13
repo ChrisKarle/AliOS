@@ -72,13 +72,20 @@ static void addHandler(struct IrqCtrl* ctrl, unsigned int n,
    ICDDCR(gic) = 0;
    ICCICR(gic) = 0;
 
-   ICDICFRn(gic)[n / 16] &= ~(0x3 << ((n % 16) * 2));
+   if (n > 32)
+   {
+      ICDICFRn(gic)[n / 16] &= ~(0x3 << ((n % 16) * 2));
 
-   if (edge)
-      ICDICFRn(gic)[n / 16] |= (0x2 << ((n % 16) * 2));
+      if (edge)
+         ICDICFRn(gic)[n / 16] |= (0x2 << ((n % 16) * 2));
 
-   ICDIPTRn(gic)[n / 4] &= ~(0xFF << ((n % 4) * 8));
-   ICDIPTRn(gic)[n / 4] |= (cpuMask << ((n % 4) * 8));
+      ICDIPTRn(gic)[n / 4] &= ~(0xFF << ((n % 4) * 8));
+#ifdef SMP
+      ICDIPTRn(gic)[n / 4] |= (cpuMask << ((n % 4) * 8));
+#else
+      ICDIPTRn(gic)[n / 4] |= (1 << ((n % 4) * 8));
+#endif
+   }
 
    if (fx != NULL)
       ICDISERn(gic)[n / 32] |= (1 << (n % 32));
@@ -88,11 +95,33 @@ static void addHandler(struct IrqCtrl* ctrl, unsigned int n,
    gic->vector[n] = fx;
    gic->arg[n] = arg;
 
-   ICCPMR(gic) = 0xFFFF;
+   ICCPMR(gic) = 0xFF;
    ICCICR(gic) = 3;
    ICDDCR(gic) = 1;
 }
 
+/****************************************************************************
+ *
+ ****************************************************************************/
+void gicIRQ(unsigned int _n, void* _gic)
+{
+   GIC* gic = (GIC*) _gic;
+   unsigned long n;
+
+   n = ICCIAR(gic);
+   ICCEOIR(gic) = n;
+   n &= 0x000003FF;
+
+   if (n >= 1020)
+      return;
+
+   if (gic->vector[n] != NULL)
+      gic->vector[n](n, gic->arg[n]);
+   else
+      puts("unhandled irq");
+}
+
+#ifdef SMP
 /****************************************************************************
  *
  ****************************************************************************/
@@ -107,38 +136,17 @@ void gicSGI(GIC* gic, int cpu, unsigned int n)
 /****************************************************************************
  *
  ****************************************************************************/
-void gicIRQ(unsigned int _n, void* _gic)
-{
-   GIC* gic = (GIC*) _gic;
-   unsigned long n;
-
-   n = ICCIAR(gic);
-   ICCEOIR(gic) = n;
-   n &= 0x000001FF;
-
-#if 0
-   /* QEMU likes to send IRQs to CPUs it shouldn't. */
-   if ((cpuID() > 0) && (n > 2))
-   {
-      puts("irq on wrong cpu");
-      return;
-   }
-#endif
-
-   if (gic->vector[n] != NULL)
-      gic->vector[n](n, gic->arg[n]);
-   else
-      puts("unhandled irq");
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
 void gicInitSMP(GIC* gic)
 {
+   int i;
+
+   for (i = 0; i < (32 / 4); i++)
+      ICDIPRn(gic)[i] = 0x00000000;
+
    ICCICR(gic) = 1;
    ICCEOIR(gic) = ICCIAR(gic);
 }
+#endif
 
 /****************************************************************************
  *

@@ -45,11 +45,6 @@
 /****************************************************************************
  *
  ****************************************************************************/
-#define DYNAMIC_TICK 1
-
-/****************************************************************************
- *
- ****************************************************************************/
 extern uint8_t __stack[];
 
 /****************************************************************************
@@ -84,50 +79,23 @@ static const ShellCmd SHELL_CMDS[] =
 /****************************************************************************
  *
  ****************************************************************************/
-void taskTimer(unsigned long ticks)
+unsigned long taskScheduleTick(bool adj, unsigned long ticks)
 {
-#if DYNAMIC_TICK
-   if (ticks > 15)
+   if (!adj)
    {
-      if (ticks > 31)
-         OCR2A = F_CPU / 1000 / 64 * 2;
+      if (ticks)
+         TCCR2B = 0x04;
       else
-         OCR2A = F_CPU / 1000 / 64;
-
-      TCCR2B = 0x07;
-   }
-   else if (ticks > 3)
-   {
-      if (ticks > 7)
-         OCR2A = F_CPU / 1000 / 64 * 2;
-      else
-         OCR2A = F_CPU / 1000 / 64;
-
-      TCCR2B = 0x06;
-   }
-   else if (ticks > 1)
-   {
-      OCR2A = F_CPU / 1000 / 64;
-      TCCR2B = 0x05;
-   }
-   else if (ticks > 0)
-   {
-      OCR2A = F_CPU / 1000 / 64;
-      TCCR2B = 0x04;
-   }
-   else
-   {
-      TCCR2B = 0x00;
+         TCCR2B = 0x00;
    }
 
-   TCNT2 = 0;
-#endif
+   return 0;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-void taskWait()
+void taskIdle()
 {
    cli();
    sleep_enable();
@@ -142,32 +110,7 @@ void taskWait()
  ****************************************************************************/
 ISR(TIMER2_COMPA_vect)
 {
-   unsigned long ticks = 1;
-
-#if DYNAMIC_TICK
-   switch (TCCR2B)
-   {
-      case 0x07:
-         if (OCR2A > (F_CPU / 1000 / 64))
-            ticks = 32;
-         else
-            ticks = 16;
-         break;
-
-      case 0x06:
-         if (OCR2A > (F_CPU / 1000 / 64))
-            ticks = 8;
-         else
-            ticks = 4;
-         break;
-
-      case 0x05:
-         ticks = 2;
-         break;
-   }
-#endif
-
-   _taskTick(ticks);
+   _taskTick(1);
    _taskPreempt(true);
 }
 
@@ -183,11 +126,8 @@ int main()
    libcInit(&uart0);
 
    /* timer2 default tick (1ms) */
-   OCR2A = F_CPU / 1000 / 64;
+   OCR2A = F_CPU / TASK_TICK_HZ / 64;
    TCCR2A = 0x02;
-#if !DYNAMIC_TICK
-   TCCR2B = 0x04;
-#endif
    TIMSK2 = 0x02;
 
    set_sleep_mode(SLEEP_MODE_IDLE);

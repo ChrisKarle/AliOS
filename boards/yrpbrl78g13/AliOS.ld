@@ -53,6 +53,15 @@ SECTIONS
 
    } >rom :misc
 
+   .bss :
+   {
+      __bss__ = .;
+      *(.bss*)
+      *(COMMON)
+      __bss_end__ = .;
+
+   } >ram
+
    .data :
    {
       __data__ = .;
@@ -62,6 +71,13 @@ SECTIONS
    } >ram AT>rom :data
 
    __data_load__ = LOADADDR(.data);
+
+   .regs 0xFFEC8 :
+   {
+       __stack__ = .;
+      . += (0xFFF00 - 0xFFEC8);
+
+   } >ram
 
    .text :
    {
@@ -82,13 +98,4 @@ SECTIONS
       __rodata_end__ = .;
 
    } >rom :rodata
-
-   .bss :
-   {
-      __bss__ = .;
-      *(.bss*)
-      *(COMMON)
-      __bss_end__ = .;
-
-   } >ram
 }

@@ -28,6 +28,7 @@
 #include <avr/interrupt.h>
 #include <stdint.h>
 #include <string.h>
+#include "kernel.h"
 #include "platform.h"
 
 /****************************************************************************
@@ -38,7 +39,7 @@
 /****************************************************************************
  *
  ****************************************************************************/
-static bool flag = false;
+static bool iFlag = false;
 
 /****************************************************************************
  *
@@ -50,7 +51,7 @@ void __taskSwitch(void** current, void* next);
  ****************************************************************************/
 bool kernelLocked()
 {
-   return flag || ((SREG & 0x80) == 0);
+   return (SREG & 0x80) == 0;
 }
 
 /****************************************************************************
@@ -59,10 +60,9 @@ bool kernelLocked()
 void kernelLock()
 {
    if (SREG & 0x80)
-   {
       cli();
-      flag = true;
-   }
+
+   iFlag = true;
 }
 
 /****************************************************************************
@@ -70,14 +70,27 @@ void kernelLock()
  ****************************************************************************/
 void kernelUnlock()
 {
-   if (flag)
+   if (iFlag)
       sei();
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-void taskSetup(Task* task, void (*fx)(void*, void*), void* arg1, void* arg2)
+void _taskEntry(Task* task)
+{
+   sei();
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void _taskExit(Task* task) {}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+void taskSetup(Task* task, void (*fx)())
 {
    uint8_t* stack = (uint8_t*) task->stack.base + task->stack.size;
 
@@ -87,41 +100,27 @@ void taskSetup(Task* task, void (*fx)(void*, void*), void* arg1, void* arg2)
 
    stack[-1] = (uint8_t) ((uintptr_t) fx >> 0);
    stack[-2] = (uint8_t) ((uintptr_t) fx >> 8);
-   stack[-3] = 0;
-   stack[-4] = 0; /* r1 must equal 0 */
-   stack[-5] = 2;
-   stack[-6] = 3;
-   stack[-7] = 4;
-   stack[-8] = 5;
-   stack[-9] = 6;
-   stack[-10] = 7;
-   stack[-11] = 8;
-   stack[-12] = 9;
-   stack[-13] = 10;
-   stack[-14] = 11;
-   stack[-15] = 12;
-   stack[-16] = 13;
-   stack[-17] = 14;
-   stack[-18] = 15;
-   stack[-19] = 16;
-   stack[-20] = 17;
-   stack[-21] = 18;
-   stack[-22] = 19;
-   stack[-23] = 20;
-   stack[-24] = 21;
-   stack[-25] = (uint8_t) ((uintptr_t) arg2 >> 0);
-   stack[-26] = (uint8_t) ((uintptr_t) arg2 >> 8);
-   stack[-27] = (uint8_t) ((uintptr_t) arg1 >> 0);
-   stack[-28] = (uint8_t) ((uintptr_t) arg1 >> 8);
-   stack[-29] = 26;
-   stack[-30] = 27;
-   stack[-31] = 28;
-   stack[-32] = 29;
-   stack[-33] = 30;
-   stack[-34] = 31;
-   stack[-35] = 0x80; /* SREG (interrupts enabled) */
+   stack[-3] = 0; // r1 must equal 0
+   stack[-4] = 2; // r2
+   stack[-5] = 3; // ...
+   stack[-6] = 4;
+   stack[-7] = 5;
+   stack[-8] = 6;
+   stack[-9] = 7;
+   stack[-10] = 8;
+   stack[-11] = 9;
+   stack[-12] = 10;
+   stack[-13] = 11;
+   stack[-14] = 12;
+   stack[-15] = 13;
+   stack[-16] = 14;
+   stack[-17] = 15;
+   stack[-18] = 16;
+   stack[-19] = 17;
+   stack[-20] = 28;
+   stack[-21] = 29;
 
-   task->stack.ptr = stack - 36;
+   task->stack.ptr = stack - 22;
 }
 
 #if TASK_STACK_USAGE

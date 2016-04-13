@@ -154,9 +154,6 @@
  ****************************************************************************/
 static void printInt(int value)
 {
-   int length = 0;
-   char buffer[4];
-
    if (value < 0)
       putchar('-');
 
@@ -164,6 +161,9 @@ static void printInt(int value)
 
    if (value > 9999)
       value = 9999;
+
+   int length = 0;
+   char buffer[4];
 
    do
    {
@@ -600,7 +600,6 @@ char* readline(const char* prompt)
 void add_history(char* line)
 {
    HistoryData* history = taskGetData(HISTORY_DATA_ID);
-   char* tmp = NULL;
    unsigned int i = 0;
 
    if ((history == NULL) || (history->size == 0))
@@ -616,7 +615,7 @@ void add_history(char* line)
       history->buffer[i] = NULL;
    }
 
-   tmp = rl_realloc(NULL, strlen(line) + 1);
+   char* tmp = rl_realloc(NULL, strlen(line) + 1);
 
    if (tmp == NULL)
       return;
@@ -637,10 +636,11 @@ void add_history(char* line)
 void clear_history()
 {
    HistoryData* history = taskGetData(HISTORY_DATA_ID);
-   unsigned int i = 0;
 
    if (history != NULL)
    {
+      unsigned int i = 0;
+
       while ((i < history->size) && (history->buffer[i] != NULL))
       {
          rl_free(history->buffer[i]);

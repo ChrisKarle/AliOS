@@ -46,12 +46,13 @@ LD_FILE = $(PROJECT).ld
 #
 ##############################################################################
 .PHONY: all
-all: $(ELF_FILE)
+all: $(HEX_FILE)
 
 ##############################################################################
 #
 ##############################################################################
-C_FLAGS = -Wall -Wno-main -Os -nostdinc -mcpu=g13 -mmul=g13
+C_FLAGS = -Wall -Wno-main -Os -nostdinc -mcpu=g13 -mmul=g13 -std=c99
+#C_FLAGS = -g -Wall -Wno-main -nostdinc -mcpu=g13 -mmul=g13 -std=c99
 LD_FLAGS = -nostdlib -Wl,-loptc,-lgcc -Wl,-T $(LD_FILE) -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I$(TOOLCHAIN_PATH)/rl78-elf/optlibinc -I.
 C_FILES = board.c

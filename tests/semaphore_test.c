@@ -29,51 +29,63 @@
 #include <stdlib.h>
 #include "board.h"
 #include "kernel.h"
+#include "platform.h"
 #include "semaphore_test.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-static Timer timer = TIMER_CREATE("semaphore_test", TIMER_FLAG_ASYNC);
 static Semaphore semaphore1 = SEMAPHORE_CREATE("semaphore_test1", 0, 2);
 static Semaphore semaphore2 = SEMAPHORE_CREATE("semaphore_test2", 0, 1);
 static Task task1 = TASK_CREATE("semaphore_test1",
+                                TASK_LOW_PRIORITY,
                                 SEMAPHORE_TEST1_STACK_SIZE);
 static Task task2 = TASK_CREATE("semaphore_test2",
+                                TASK_HIGH_PRIORITY,
                                 SEMAPHORE_TEST2_STACK_SIZE);
 static Task task3 = TASK_CREATE("semaphore_test3",
+                                TASK_HIGH_PRIORITY,
                                 SEMAPHORE_TEST3_STACK_SIZE);
+static Timer timer = TIMER_CREATE(0, 0, NULL);
 static unsigned long x[3] = {0, 0, 0};
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void fxTimer(Timer* _timer)
+static void timerFx(Timer* timer)
 {
    if (_semaphoreGive(&semaphore1))
       x[0]++;
 
-   _timerAdd(_timer, NULL, fxTimer, NULL, 0, rand() % 100);
+   timer->timeout[0] = rand() % 100;
+   timer->timeout[1] = timer->timeout[0];
+
+   _timerAdd(timer, timerFx, NULL);
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void fxTask1(void* arg)
+static void taskFx1(void* arg)
 {
    for (;;)
    {
       semaphoreTake(&semaphore2, -1);
       semaphoreTake(&semaphore1, -1);
+
       x[1]++;
+
       taskSleep(rand() % 100);
+
+      if (kernelLocked())
+         puts("semaphore error 1");
    }
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void fxTask2(void* arg)
+static void taskFx2(void* arg)
 {
    for (;;)
    {
@@ -81,18 +93,25 @@ static void fxTask2(void* arg)
          x[2]++;
 
       taskSleep(rand() % 100);
+
+      if (kernelLocked())
+         puts("semaphore error 2");
    }
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void fxTask3(void* arg)
+static void taskFx3(void* arg)
 {
    for (;;)
    {
       semaphoreGive(&semaphore2);
+
       taskSleep(rand() % 100);
+
+      if (kernelLocked())
+         puts("semaphore error 3");
    }
 }
 
@@ -112,8 +131,12 @@ void semaphoreTestCmd(int argc, char* argv[])
  ****************************************************************************/
 void semaphoreTest()
 {
-   timerAdd(&timer, NULL, fxTimer, NULL, 0, rand() % 100);
-   taskStart(&task1, fxTask1, NULL, TASK_LOW_PRIORITY);
-   taskStart(&task2, fxTask2, NULL, TASK_HIGH_PRIORITY);
-   taskStart(&task3, fxTask3, NULL, TASK_HIGH_PRIORITY);
+   timer.timeout[0] = rand() % 100;
+   timer.timeout[1] = timer.timeout[1];
+
+   timerAdd(&timer, timerFx, NULL);
+
+   taskStart(&task1, taskFx1, NULL);
+   taskStart(&task2, taskFx2, NULL);
+   taskStart(&task3, taskFx3, NULL);
 }

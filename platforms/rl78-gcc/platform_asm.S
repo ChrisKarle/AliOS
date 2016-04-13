@@ -31,7 +31,6 @@
  *
  ****************************************************************************/
    .text
-   .p2align 1
    .global _start
 _start:
    di
@@ -62,7 +61,7 @@ _start:
    br $3b
 4:
    mov es, #0x0F
-   movw ax, #0xFEE0
+   movw ax, #__stack__
    movw sp, ax
    movw bc, #TASK0_STACK_SIZE
    subw ax, bc
@@ -75,76 +74,64 @@ _start:
  *
  ****************************************************************************/
    .text
-   .p2align 1
    .global ___taskSwitch
 ___taskSwitch:
+#if defined(__RL78_G13__) || defined(__RL78_G14__)
+   movw de, #0xFEE8
+#else
+   movw de, #0xFED0
+#endif
+   subw sp, #8
+   movw ax, [de + 0]
+   movw [sp + 0], ax
+   movw ax, [de + 2]
+   movw [sp + 2], ax
+   movw ax, [de + 4]
+   movw [sp + 4], ax
+   movw ax, [de + 6]
+   movw [sp + 6], ax
    push psw
-#if defined(__RL78_G13__) || defined(__RL78_G14__)
-   sel rb0
-#endif
-   push ax
-   push bc
-   push de
-   push hl
-   movw ax, [sp + 14]
-   movw bc, ax
-   movw ax, [sp + 16]
-   movw de, ax
-   mov a, es
-   mov h, a
-   mov a, cs
-   push ax
-#if defined(__RL78_G13__) || defined(__RL78_G14__)
-   sel rb1
-   push ax
-   push bc
-   push de
-   push hl
-   sel rb2
-   push ax
-   push bc
-   push de
-   push hl
-   sel rb3
-   push ax
-   push bc
-   push de
-   push hl
-   sel rb0
-#endif
 
+   movw ax, [sp + 14]
+   movw de, ax
    movw ax, sp
-   movw [bc], ax
-   movw ax, de
+   movw [de], ax
+
+   movw ax, [sp + 16]
    movw sp, ax
 
 #if defined(__RL78_G13__) || defined(__RL78_G14__)
-   sel rb3
-   pop hl
-   pop de
-   pop bc
-   pop ax
-   sel rb2
-   pop hl
-   pop de
-   pop bc
-   pop ax
-   sel rb1
-   pop hl
-   pop de
-   pop bc
-   pop ax
-   sel rb0
+   movw de, #0xFEE8
+#else
+   movw de, #0xFED0
 #endif
-   pop ax
-   mov cs, a
-   mov a, h
-   mov es, a
-   pop hl
-   pop de
-   pop bc
-   pop ax
    pop psw
+   movw ax, [sp + 0]
+   movw [de + 0], ax
+   movw ax, [sp + 2]
+   movw [de + 2], ax
+   movw ax, [sp + 4]
+   movw [de + 4], ax
+   movw ax, [sp + 6]
+   movw [de + 6], ax
+   addw sp, #8
+
+   ret
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+   .text
+   .global ___delay
+___delay:
+   movw ax, [sp + 4]
+1:
+#if defined(__RL78_G14__) || defined(__RL78_G13__)
+   subw ax, #3
+#else
+   subw ax, #4
+#endif
+   bh $1b
    ret
 
 /****************************************************************************
@@ -164,7 +151,7 @@ ___taskSwitch:
  *
  ****************************************************************************/
    .section .vectors, "a"
-   .short _start, 0x0000, __INTWDTI, __INTLVI, __INTP0, __INTP1, __INTP2,   \
+   .short _start, 0xFFFF, __INTWDTI, __INTLVI, __INTP0, __INTP1, __INTP2,   \
           __INTP3, __INTP4, __INTP5, __INTST2, __INTSR2, __INTSRE2,         \
           __INTDMA0, __INTDMA1, __INTST0, __INTSR0, __INTSRE0, __INTST1,    \
           __INTSR1, __INTSRE1, __INTIICA0, __INTTM00, __INTTM01, __INTTM02, \
@@ -173,8 +160,8 @@ ___taskSwitch:
           __INTP6, __INTP7, __INTP8, __INTP9, __INTP10, __INTP11,           \
           __INTTM10, __INTTM11, __INTTM12, __INTSRE3, __INTMD, __INTIICA1,  \
           __INTFL, __INTDMA2, __INTDMA3, __INTTM14, __INTTM15, __INTTM16,   \
-          __INTTM17, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,        \
-          0x0000, __BRK
+          __INTTM17, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,        \
+          0xFFFF, __BRK
 
 /****************************************************************************
  *

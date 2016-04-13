@@ -54,10 +54,7 @@ ___delay:
  * R6 - R13  : saved
  * R14 - R15 : not saved
  *
- * This function saves more than what is required because it needs to be able
- * to start a task with given args (R1 & R2).
- *
- * Maybe this should just not use the interupt stack at all...  Right now,
+ * Maybe this should just not use the interrupt stack at all...  Right now,
  * data is copied from and restored to it.  There should never be that much
  * data on the interrupt stack, but it still feels hacky.
  ****************************************************************************/
@@ -83,19 +80,12 @@ ___taskSwitch:
    mov r4, r1
    mov r5, r2
 1:
-   mvfc fpsw, r3
-   mvfachi r4
-   mvfacmi r5
-   pushm r1-r15
+   pushm r6-r15
 
    mov.l r0, [r1]
    mov.l r2, r0
 
-   popm r1-r15
-   mvtc r3, fpsw
-   mvtachi  r4
-   shll #16, r5
-   mvtaclo  r5
+   popm r6-r15
 
    tst #0x00020000, r14
    bnz 2f
@@ -117,19 +107,19 @@ ___taskSwitch:
    .text
    .global _start
 _start:
-   /* copy the data section from ROM to its proper place in RAM */
-   mov.l #__data__, r1
-   mov.l #__data_load__, r2
-   mov.l #__data_end__, r3
-   sub r1, r3
-   smovf
-
    /* zero out the bss section */
    mov.l #__bss__, r1
    mov.l #0, r2
    mov.l #__bss_end__, r3
    sub r1, r3
    sstr.b
+
+   /* copy the data section from ROM to its proper place in RAM */
+   mov.l #__data__, r1
+   mov.l #__data_load__, r2
+   mov.l #__data_end__, r3
+   sub r1, r3
+   smovf
 
    mvtc #__stack + INTERRUPT_STACK_SIZE, isp
    mvtc #__stack + INTERRUPT_STACK_SIZE + TASK0_STACK_SIZE, usp

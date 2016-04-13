@@ -35,47 +35,6 @@
 #include "board.h"
 
 /****************************************************************************
- * Macro: TASK_CREATE
- *    - Creates a statically allocated task container.
- * Arguments:
- *    name      - name of task (must be const, non-local pointer)
- *    stackSize - stack size in bytes
- ****************************************************************************/
-#define TASK_CREATE(name, stackSize)                 \
-{                                                    \
-   name,                                             \
-   TASK_STATE_END,                                   \
-   0,                                                \
-   0,                                                \
-   {stackSize, (unsigned char[stackSize]) {}, NULL}, \
-   {},                                               \
-   NULL,                                             \
-   {},                                               \
-   NULL                                              \
-}
-
-/****************************************************************************
- * Macro: TASK_CREATE_PTR
- *    - Gets a pointer to a statically allocated task container.
- * Arguments:
- *    name      - name of task (must be const, non-local pointer)
- *    stackSize - stack size in bytes
- ****************************************************************************/
-#define TASK_CREATE_PTR(name, stackSize) \
-   ((Task[1]) {TASK_CREATE(name, stackSize)})
-
-/****************************************************************************
- *
- ****************************************************************************/
-#define TASK_STATE_READY     0
-#define TASK_STATE_RUN       1
-#define TASK_STATE_SLEEP     2
-#define TASK_STATE_QUEUE     3
-#define TASK_STATE_SEMAPHORE 4
-#define TASK_STATE_MUTEX     5
-#define TASK_STATE_END       6
-
-/****************************************************************************
  *
  ****************************************************************************/
 #ifndef TASK_PREEMPTION
@@ -85,9 +44,71 @@
 /****************************************************************************
  *
  ****************************************************************************/
+#ifndef TASK_REAPER
+#define TASK_REAPER 0
+#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 #ifndef TASK_AT_EXIT
 #define TASK_AT_EXIT 0
 #endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+#ifndef TASK_STACK_USAGE
+#define TASK_STACK_USAGE 0
+#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+#ifndef TASK_LIST
+#define TASK_LIST 0
+#endif
+
+/****************************************************************************
+ * Macro: TASK_CREATE
+ *    - Creates a statically allocated task container.
+ * Arguments:
+ *    name      - name of task (must be const, non-local pointer)
+ *    priority  - lower integer values represent higher priorities
+ *    stackSize - stack size in bytes
+ ****************************************************************************/
+#define TASK_CREATE(name, priority, stackSize)       \
+{                                                    \
+   name,                                             \
+   priority,                                         \
+   TASK_STATE_INIT,                                  \
+   0,                                                \
+   0,                                                \
+   {NULL, NULL},                                     \
+   {stackSize, (unsigned char[stackSize]) {}, NULL}, \
+   {0, NULL, NULL, NULL},                            \
+   {},                                               \
+   NULL,                                             \
+   NULL                                              \
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+#define TASK_CREATE_PTR(name, priority, stackSize) \
+   ((Task[1]) {TASK_CREATE(name, priority, stackSize)})
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+#define TASK_STATE_INIT      0
+#define TASK_STATE_END       1
+#define TASK_STATE_RUN       2
+#define TASK_STATE_READY     3
+#define TASK_STATE_SLEEP     4
+#define TASK_STATE_QUEUE     5
+#define TASK_STATE_SEMAPHORE 6
+#define TASK_STATE_MUTEX     7
 
 /****************************************************************************
  *
@@ -107,9 +128,17 @@ typedef struct TaskData
 typedef struct Task
 {
    const char* name;
-   unsigned char state;
    unsigned char priority;
-   unsigned short flags;
+   unsigned char state;
+   unsigned char flags;
+   unsigned char cpu;
+
+   struct
+   {
+      void (*fx)(void*);
+	  void* arg;
+
+   } start;
 
    struct
    {
@@ -121,22 +150,22 @@ typedef struct Task
 
    struct
    {
-      void* type;
       unsigned long timeout;
-      void* ptr;
       struct Task* next;
+      void* arg0;
+      void* arg1;
 
-   } wait;
-
-   TaskData* data;
+   } inactive;
 
    struct
    {
-#if TASK_AT_EXIT
+#if TASK_AT_EXIT && defined(kmalloc)
       unsigned int size;
       void (**fx)();
 #endif
    } exit;
+
+   TaskData* data;
 
    struct Task* next;
 
@@ -148,6 +177,7 @@ typedef struct Task
  *    - Dynamically creates a new task container.
  * Arguments:
  *    name       - name of task (must be const, non-local pointer)
+ *    priority   - lower integer values represent higher priorities
  *    stackSize  - stack size in bytes
  *    freeOnExit - free task container on task exit
  * Returns:
@@ -155,57 +185,76 @@ typedef struct Task
  * Notes:
  *    - Should not be called from interrupt context because of kmalloc usage.
  ****************************************************************************/
-Task* taskCreate(const char* name, unsigned long stackSize, bool freeOnExit);
+Task* taskCreate(const char* name, unsigned char priority,
+                 unsigned long stackSize, bool freeOnExit);
 #endif
 
 /****************************************************************************
  * Function: _taskStart
  *    - Starts a new task.
  * Arguments:
- *    task     - task container to use
- *    fx       - pointer to task function
- *    arg      - argument to pass to task function
- *    priority - lower integer values represent higher priorities
+ *    task - task container to use
+ *    fx   - pointer to task function
+ *    arg  - argument to pass to task function
  * Returns:
  *    - true if successful, false otherwise
  * Notes:
- *    - Task container must be in the TASK_STATE_END state.
+ *    - Task container must be in the TASK_STATE_INIT state.
  *    - Use ONLY within interrupt context.
  ****************************************************************************/
-bool _taskStart(Task* task, void (*fx)(void*), void* arg,
-                unsigned char priority);
+bool _taskStart(Task* task, void (*fx)(void*), void* arg);
 
 /****************************************************************************
  * Function: _taskStart
  *    - Starts a new task.
  * Arguments:
- *    task     - task container to use
- *    fx       - pointer to task function
- *    arg      - argument to pass to task function
- *    priority - lower integer values represent higher priorities
+ *    task - task container to use
+ *    fx   - pointer to task function
+ *    arg  - argument to pass to task function
  * Returns:
  *    - true if successful, false otherwise
  * Notes:
- *    - Task container must be in the TASK_STATE_END state.
+ *    - Task container must be in the TASK_STATE_INIT state.
  *    - Do NOT use within interrupt context.
  ****************************************************************************/
-bool taskStart(Task* task, void (*fx)(void*), void* arg,
-               unsigned char priority);
+bool taskStart(Task* task, void (*fx)(void*), void* arg);
 
-#if TASK_PREEMPTION
 /****************************************************************************
- * Function: _taskPreempt
- *    - Preempts the current task.
- * Arguments:
- *    yield - true = preempt if current level priority (or higher) task ready
- *            false = preempt only if higher priority task is ready
+ * Function: taskExit
+ *    - Ends execution of the current task.
  * Notes:
- *    - Use ONLY within interrupt context.
+ *    - It is NOT required to call this function at the end of the task
+ *      function.  It will be automatically called when the task function
+ *      exits.
+ *    - Do NOT use within interrupt context.
  ****************************************************************************/
-void _taskPreempt(bool yield);
-#else
-#define _taskPreempt(yield)
+void taskExit();
+
+#if TASK_AT_EXIT && defined(krealloc)
+/****************************************************************************
+ * Function: taskAtExit
+ *    - Registers a function to be called when a task exits.
+ * Arguments:
+ *    callback - callback function
+ * Returns:
+ *    - returns 0 on success, non-zero on error
+ * Notes:
+ *    - Callbacks are called in reverse registration order.
+ *    - Called within task context.
+ *    - Should not be called from interrupt context because of kmalloc usage.
+ ****************************************************************************/
+int taskAtExit(void (*callback)());
 #endif
+
+/****************************************************************************
+ * Function: taskSleep
+ *    - Sleeps the current task for a duration.
+ * Arguments:
+ *    ticks - number of system ticks to sleep
+ * Notes:
+ *    - Do NOT use within interrupt context.
+ ****************************************************************************/
+void taskSleep(unsigned long ticks);
 
 /****************************************************************************
  * Macro: taskYield
@@ -219,14 +268,13 @@ void _taskPreempt(bool yield);
 #define taskYield() taskSleep(0)
 
 /****************************************************************************
- * Function: taskSleep
- *    - Sleeps the current task for a duration.
- * Arguments:
- *    ticks - number of system ticks to sleep
+ * Macro: taskStop
+ *    - Stops the current task.
  * Notes:
+ *    - Stops and disables the current task from execution.
  *    - Do NOT use within interrupt context.
  ****************************************************************************/
-void taskSleep(unsigned long ticks);
+#define taskStop() taskSleep(-1)
 
 /****************************************************************************
  * Function: _taskPriority
@@ -277,19 +325,32 @@ bool taskSetData(int id, void* ptr);
  ****************************************************************************/
 void* taskGetData(int id);
 
+#if TASK_PREEMPTION
 /****************************************************************************
- *
+ * Function: _taskPreempt
+ *    - Preempts the current task.
+ * Arguments:
+ *    yield - true = preempt if current level priority (or higher) task ready
+ *            false = preempt only if higher priority task is ready
+ * Notes:
+ *    - Use ONLY within interrupt context.
  ****************************************************************************/
-#ifndef TASK_STACK_USAGE
-#define TASK_STACK_USAGE 0
+void _taskPreempt(bool yield);
+#else
+#define _taskPreempt(yield)
 #endif
 
 /****************************************************************************
- *
+ * Function: _taskTick
+ *    - Advances the kernel so many system ticks.
+ * Arguments:
+ *    ticks - number of ticks that have passed
+ * Notes:
+ *    - This function must be called to advance kernel timeouts and timers.
+ *    - Calls taskScheduleTick() to reschedule the next tick.
+ *    - Use ONLY within interrupt context.
  ****************************************************************************/
-#ifndef TASK_LIST
-#define TASK_LIST 0
-#endif
+void _taskTick(unsigned long ticks);
 
 #if TASK_LIST
 /****************************************************************************
@@ -303,55 +364,152 @@ void* taskGetData(int id);
 void taskList();
 #endif
 
-#if TASK_AT_EXIT && defined(kmalloc)
-/****************************************************************************
- * Function: taskAtExit
- *    - Registers a function to be called when a thread exits.
- * Arguments:
- *    callback - callback function
- * Returns:
- *    - returns 0 on success, non-zero on error
- * Notes:
- *    - Callbacks are called in reverse registration order.
- *    - Should not be called from interrupt context because of kmalloc usage.
- ****************************************************************************/
-int taskAtExit(void (*callback)());
-#endif
-
-/****************************************************************************
- * Function: taskExit
- *    - Ends execution of the current task.
- * Notes:
- *    - It is NOT required to call this function at the end of the task
- *      function.  It will be automatically called when the task function
- *      exits.
- *    - Do NOT use within interrupt context.
- ****************************************************************************/
-void taskExit();
-
-/****************************************************************************
- * Function: _taskTick
- *    - Advances the kernel so many system ticks.
- * Arguments:
- *    ticks - number of ticks that have passed
- * Notes:
- *    - This must be called to advance timeouts and timers.
- *    - Use ONLY within interrupt context.
- ****************************************************************************/
-void _taskTick(unsigned long ticks);
-
 /****************************************************************************
  * Function: taskInit
- *    - Initializes the kernel's tasking system & "main" task.
+ *    - Initializes the kernel's tasking system and first task.
  * Arguments:
- *    task      - UNINITITIALIZED task container for "main"
- *    name      - name of "main" task
- *    priority  - priority to assign to "main" task
+ *    task      - UNINITITIALIZED task container
+ *    name      - name of first task
+ *    priority  - priority to assign to first task
  *    stackBase - base/bottom of stack
  *    stackSize - size of stack in bytes
  ****************************************************************************/
 void taskInit(Task* task, const char* name, unsigned char priority,
               void* stackBase, unsigned long stackSize);
+
+/****************************************************************************
+ * Function: _taskInit
+ *    - Callback to perform low-level initialization of kernel's first task.
+ * Arguments:
+ *    task      - task container
+ *    stackBase - base/bottom of stack
+ *    stackSize - size of stack in bytes
+ ****************************************************************************/
+void _taskInit(Task* task, void* stackBase, unsigned long stackSize);
+
+/****************************************************************************
+ * Function: taskSetup
+ *    - Callback to perform low-level task initialization.
+ * Arguments:
+ *    task - task container
+ *    fx   - task function
+ ****************************************************************************/
+void taskSetup(Task* task, void (*fx)());
+
+/****************************************************************************
+ * Function: _taskSwitch
+ *    - Callback to perform a context switch.
+ * Arguments:
+ *    current - current task (save context)
+ *    next    - next task (restore context)
+ ****************************************************************************/
+void _taskSwitch(Task* current, Task* next);
+
+/****************************************************************************
+ * Function: _taskEntry
+ *    - Callback when a thread starts.
+ * Arguments:
+ *    task - task container
+ * Notes:
+ *    - This function is called with the kernel locked and from within
+ *      the context of the task.
+ ****************************************************************************/
+void _taskEntry(Task* task);
+
+/****************************************************************************
+ * Function: _taskExit
+ *    - Callback when a thread exits.
+ * Arguments:
+ *    task - task container
+ * Notes:
+ *    - This function is called with the kernel locked and NOT from within
+ *      the context of the exited task.
+ ****************************************************************************/
+void _taskExit(Task* task);
+
+/****************************************************************************
+ * Function: taskIdle
+ *    - Callback when the kernel has no task to run.
+ * Notes:
+ *    - In SMP, this function can be called for each processor.
+ ****************************************************************************/
+void taskIdle();
+
+#if TASK_STACK_USAGE
+/****************************************************************************
+ * Function: taskStackUsage
+ *    - Callback to determine amount of stack used for a task.
+ * Arguments:
+ *    task - task to inspect
+ * Returns:
+ *    - number of stack bytes used
+ ****************************************************************************/
+unsigned long taskStackUsage(Task* task);
+#endif
+
+/****************************************************************************
+ * Function: taskScheduleTick
+ *    - Callback to schedule a system tick.
+ * Arguments:
+ *    adj   - true if the kernel is adjusting (shortening) the current tick
+ *            interrupt/event, false if scheduling a new tick
+ *    ticks - schedule a tick interrupt/event in this many system ticks
+ * Returns:
+ *    - (adj = true) number of ticks that have elapsed since the last call
+ *      to this function
+ *    - (adj = false) return 0
+ * Notes:
+ *    - If adjusting the current tick interrupt/event (adj = true), the
+ *      kernel will only ever shorten the time.  It will never lengthen it.
+ *    - It is possible to schedule a tick interrupt/event earlier than
+ *      requested.
+ ****************************************************************************/
+unsigned long taskScheduleTick(bool adj, unsigned long ticks);
+
+/****************************************************************************
+ * Function: kernelLocked
+ *    - Callback to determine if the kernel is locked.
+ * Returns:
+ *    - true if locked, false otherwise
+ ****************************************************************************/
+bool kernelLocked();
+
+/****************************************************************************
+ * Function: kernelLock
+ *    - Callback to lock the kernel.
+ ****************************************************************************/
+void kernelLock();
+
+/****************************************************************************
+ * Function: kernelUnlock
+ *    - Callback to unlock the kernel.
+ ****************************************************************************/
+void kernelUnlock();
+
+/****************************************************************************
+ * Macro: cpuID
+ *    - Gets the CPU ID of the current processor.
+ * Returns:
+ *    - ID of CPU
+ * Notes:
+ *    - Boot CPU must have an ID of 0.
+ *    - CPU IDs must be contiguous in sequential order.
+ ****************************************************************************/
+#ifndef cpuID
+#define cpuID() 0
+#endif
+
+/****************************************************************************
+ * Macro: cpuWake
+ *    - Wakes/interrupts a CPU from idle (or wait for interrupt) state.
+ * Arguments:
+ *    id - ID of CPU to wake/interrupt (-1 wake/interrupt all).
+ * Notes:
+ *    - An ID of -1 need not wake/interrupt the current CPU.
+ ****************************************************************************/
+#ifndef cpuWake
+#define cpuWake(id)
+#endif
 
 /****************************************************************************
  *
@@ -365,64 +523,52 @@ void taskInit(Task* task, const char* name, unsigned char priority,
  * Macro: TIMER_CREATE
  *    - Creates a statically allocated timer.
  * Arguments:
- *    name  - name of task
- *    flags - see below
- * Notes:
- *    - ASYNC timers run within the interrupt context, so exercise caution.
- *    - When a non-ASYNC timer expires, the kernel will try to start the
- *      assigned task.  If there is a currently executing task for the task
- *      container, the kernel will try to run the task again on the next
- *      system tick.
+ *    flags - see below.
+ *    timeout - number of system ticks before the timer expires.
+ *    task - If not NULL, the kernel runs the timer function as a task using
+ *           this task container.  If NULL, the timer function is run with
+ *           the kernel locked, so use caution.
  ****************************************************************************/
-#define TIMER_CREATE(name, flags) \
-{                                 \
-   name,                          \
-   NULL,                          \
-   NULL,                          \
-   NULL,                          \
-   {0, 0},                        \
-   0,                             \
-   flags,                         \
-   NULL                           \
+#define TIMER_CREATE(flags, timeout, task) \
+{                                          \
+   flags,                                  \
+   {timeout, timeout},                     \
+   task,                                   \
+   NULL,                                   \
+   NULL,                                   \
+   NULL                                    \
 }
 
 /****************************************************************************
- * Macro: TIMER_CREATE_PTR
- *    - Gets a pointer to a statically allocated timer.
- * Arguments:
- *    name  - name of task
- *    flags - see below
- * Notes:
- *    - See above.
+ *
  ****************************************************************************/
-#define TIMER_CREATE_PTR(name, flags) \
-   ((Timer[1]) {TIMER_CREATE(name, flags)})
+#define TIMER_CREATE_PTR(flags, timeout, task) \
+   ((Timer[1]) {TIMER_CREATE(flags, timeout, task)})
 
 /****************************************************************************
- * TIMER_FLAG_ASYNC - Do not start a task for this timer.  The callback
- *                    function is called from within the taskTick function.
+ * TIMER_FLAG_EXPIRED  - This flag is set when the timer expires.  It is the
+ *                       responsibility of the timer function to clear this
+ *                       flag.
+ * TIMER_FLAG_OVERFLOW - The timer expired with the TIMER_FLAG_EXPIRED bit
+ *                       set.  The kernel will no longer re-schedule this
+ *                       timer.  The timer function must clear this flag.
  * TIMER_FLAG_PERIODIC - The timer will be rescheduled automatically when it
  *                       expires.
- * TIMER_FLAG_OVERFLOW - The kernel was unable to start the timer task before
- *                       the timer expired again (because a task is still
- *                       using the task container).
  ****************************************************************************/
-#define TIMER_FLAG_ASYNC    0x01
-#define TIMER_FLAG_PERIODIC 0x02
-#define TIMER_FLAG_OVERFLOW 0x04
+#define TIMER_FLAG_EXPIRED  0x01
+#define TIMER_FLAG_OVERFLOW 0x02
+#define TIMER_FLAG_PERIODIC 0x80
 
 /****************************************************************************
  *
  ****************************************************************************/
 typedef struct Timer
 {
-   const char* name;
+   volatile unsigned char flags;
+   unsigned long timeout[2];
    Task* task;
    void (*fx)(struct Timer* timer);
-   void* ptr;
-   unsigned long ticks[2];
-   unsigned char priority;
-   unsigned char flags;
+   void* arg;
    struct Timer* next;
 
 } Timer;
@@ -432,7 +578,6 @@ typedef struct Timer
  * Function: timerCreate
  *    - Dynamically allocates a new timer.
  * Arguments:
- *    name  - name of timer
  *    flags - see timer flags above
  * Returns:
  *    - pointer to initialized timer structure
@@ -440,7 +585,7 @@ typedef struct Timer
  *    - Must be destroyed with timerDestroy().
  *    - Should not be called from interrupt context because of kmalloc usage.
  ****************************************************************************/
-Timer* timerCreate(const char* name, unsigned char flags);
+Timer* timerCreate(unsigned char flags, unsigned long timeout, Task* task);
 #endif
 
 #ifdef kfree
@@ -460,37 +605,25 @@ void timerDestroy(Timer* timer);
  * Function: _timerAdd
  *    - Schedules a timer.
  * Arguments:
- *    timer    - timer container to use
- *    task     - task container to run timer task on
- *               (NULL if async timer)
- *    fx       - timer callback (a pointer to the timer is pass as the
- *               argument to the callback function)
- *    ptr      - user data (stored in timer container)
- *    priority - priority of timer task (ignored for async timers)
- *    ticks    - number of ticks for timer
+ *    timer - timer to use
+ *    fx    - timer callback
+ *    arg   - user data (stored in timer container)
  * Notes:
  *    - Use ONLY within interrupt context.
  ****************************************************************************/
-void _timerAdd(Timer* timer, Task* task, void (*fx)(Timer*), void* ptr,
-               unsigned char priority, unsigned long ticks);
+void _timerAdd(Timer* timer, void (*fx)(Timer*), void* arg);
 
 /****************************************************************************
  * Function: timerAdd
  *    - Schedules a timer.
  * Arguments:
- *    timer    - timer container to use
- *    task     - task container to run timer task on
- *               (NULL if async timer)
- *    fx       - timer callback (a pointer to the timer is pass as the
- *               argument to the callback function)
- *    ptr      - user data (stored in timer container)
- *    priority - priority of timer task (ignored for async timers)
- *    ticks    - number of ticks for timer
+ *    timer - timer to use
+ *    fx    - timer callback
+ *    arg   - user data (stored in timer container)
  * Notes:
  *    - Do NOT use within interrupt context.
  ****************************************************************************/
-void timerAdd(Timer* timer, Task* task, void (*fx)(Timer*), void* ptr,
-              unsigned char priority, unsigned long ticks);
+void timerAdd(Timer* timer, void (*fx)(Timer*), void* arg);
 
 /****************************************************************************
  * Function: timerCancel
@@ -545,16 +678,7 @@ void timerCancel(Timer* timer);
 }
 
 /****************************************************************************
- * Macro: QUEUE_CREATE_PTR
- *    - Gets a pointer to a statically allocated queue.
- * Arguments:
- *    name        - name of queue
- *    elementSize - size of a single element in bytes
- *    maxElements - maximum number of elements in queue
- * Notes:
- *    - maxElements of elementSize array is statically allocated, so use
- *      caution when creating very large queues or queues of very large
- *      elements.
+ *
  ****************************************************************************/
 #define QUEUE_CREATE_PTR(name, elementSize, maxElements) \
    ((Queue[1]) {QUEUE_CREATE(name, elementSize, maxElements)})
@@ -700,12 +824,7 @@ bool queuePop(Queue* queue, bool head, bool peek, void* dst,
 }
 
 /****************************************************************************
- * Macro: SEMAPHORE_CREATE
- *    - Gets a pointer to a statically allocated semaphore.
- * Arguments:
- *    name  - name of semaphore
- *    count - initial "signal" count of semaphore
- *    max   - maximum "signal" count of semaphore
+ *
  ****************************************************************************/
 #define SEMAPHORE_CREATE_PTR(name, count, max) \
    ((Semaphore[1]) {SEMAPHORE_CREATE(name, count, max)})
@@ -754,20 +873,6 @@ void semaphoreDestroy(Semaphore* semaphore);
 #endif
 
 /****************************************************************************
- * Function: semaphoreTake
- *    - Takes/consumes a semaphore signal.
- * Arguments:
- *    semaphore - semaphore to use
- *    ticks     - number of ticks to wait until semaphore becomes available
- *                (-1 == wait forever)
- * Returns:
- *    - true if successful / false otherwise
- * Notes:
- *    - Do NOT use within interrupt context.
- ****************************************************************************/
-bool semaphoreTake(Semaphore* semaphore, unsigned long ticks);
-
-/****************************************************************************
  * Function: _semaphoreGive
  *    - Signals a semaphore.
  * Arguments:
@@ -790,6 +895,20 @@ bool _semaphoreGive(Semaphore* semaphore);
  *    - Do NOT use within interrupt context.
  ****************************************************************************/
 bool semaphoreGive(Semaphore* semaphore);
+
+/****************************************************************************
+ * Function: semaphoreTake
+ *    - Takes/consumes a semaphore signal.
+ * Arguments:
+ *    semaphore - semaphore to use
+ *    ticks     - number of ticks to wait until semaphore becomes available
+ *                (-1 == wait forever)
+ * Returns:
+ *    - true if successful / false otherwise
+ * Notes:
+ *    - Do NOT use within interrupt context.
+ ****************************************************************************/
+bool semaphoreTake(Semaphore* semaphore, unsigned long ticks);
 #endif
 
 /****************************************************************************
@@ -816,10 +935,7 @@ bool semaphoreGive(Semaphore* semaphore);
 }
 
 /****************************************************************************
- * Macro: MUTEX_CREATE_PTR
- *    - Gets a pointer to a statically allocated mutex.
- * Arguments:
- *    name - name of mutex
+ *
  ****************************************************************************/
 #define MUTEX_CREATE_PTR(name) ((Mutex[1]) {MUTEX_CREATE(name)})
 

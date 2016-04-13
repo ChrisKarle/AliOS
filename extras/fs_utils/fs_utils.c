@@ -42,15 +42,13 @@
  ****************************************************************************/
 void fsUtils_pwd(int argc, char* argv[])
 {
-   vfs_char_t* cwd = NULL;
-
    if (argc != 1)
    {
       printf("usage: %s\n", argv[0]);
       return;
    }
 
-   cwd = vfsGetCWD();
+   vfs_char_t* cwd = vfsGetCWD();
    vfs_char_puts(cwd);
    puts("");
    free(cwd);
@@ -63,15 +61,13 @@ void fsUtils_pwd(int argc, char* argv[])
  ****************************************************************************/
 void fsUtils_cd(int argc, char* argv[])
 {
-   int status;
-
    if (argc != 2)
    {
       printf("usage: %s <path>\n", argv[0]);
       return;
    }
 
-   status = vfsChDir(argv[1]);
+   int status = vfsChDir(argv[1]);
 
    if (status < 0)
       printf("%s: %s\n", argv[1], vfsErrorStr(status));
@@ -84,17 +80,14 @@ void fsUtils_cd(int argc, char* argv[])
  ****************************************************************************/
 void fsUtils_ls(int argc, char* argv[])
 {
-   vfs_char_t* cwd = NULL;
-   int fd;
-
    if (argc != 1)
    {
       printf("usage: %s\n", argv[0]);
       return;
    }
 
-   cwd = vfsGetCWD();
-   fd = vfsOpen(cwd);
+   vfs_char_t* cwd = vfsGetCWD();
+   int fd = vfsOpen(cwd);
 
    if (fd < 0)
    {
@@ -154,15 +147,13 @@ void fsUtils_ls(int argc, char* argv[])
  ****************************************************************************/
 void fsUtils_cat(int argc, char* argv[])
 {
-   int fd;
-
    if (argc != 2)
    {
       printf("usage: %s <file>\n", argv[0]);
       return;
    }
 
-   fd = vfsOpen(argv[1]);
+   int fd = vfsOpen(argv[1]);
 
    if (fd >= 0)
    {

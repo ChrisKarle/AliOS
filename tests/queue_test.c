@@ -28,26 +28,28 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "board.h"
 #include "kernel.h"
+#include "platform.h"
 #include "queue_test.h"
 
 /****************************************************************************
  *
  ****************************************************************************/
-static Timer timer = TIMER_CREATE("queue_test", TIMER_FLAG_ASYNC);
 static Queue queue1 = QUEUE_CREATE("queue_test1", 1, 3);
 static Queue queue2 = QUEUE_CREATE("queue_test2", 1, 3);
 static Queue queue3 = QUEUE_CREATE("queue_test3", 1, 1);
-static Task task1 = TASK_CREATE("queue_test1", QUEUE_TEST1_STACK_SIZE);
-static Task task2 = TASK_CREATE("queue_test2", QUEUE_TEST2_STACK_SIZE);
+static Task task1 = TASK_CREATE("queue_test1", TASK_LOW_PRIORITY,
+                                QUEUE_TEST1_STACK_SIZE);
+static Task task2 = TASK_CREATE("queue_test2", TASK_HIGH_PRIORITY,
+                                QUEUE_TEST2_STACK_SIZE);
+static Timer timer = TIMER_CREATE(0, 0, NULL);
 static uint8_t x1[2] = {0, 0};
 static uint8_t x2[2] = {0, 0};
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void fxTimer(Timer* _timer)
+static void timerFx(Timer* timer)
 {
    bool peek = (rand() % 10) == 0;
    uint8_t x = 0;
@@ -68,24 +70,30 @@ static void fxTimer(Timer* _timer)
       }
    }
 
-   _timerAdd(_timer, NULL, fxTimer, NULL, 0, rand() % 100);
+   timer->timeout[0] = rand() % 100;
+   timer->timeout[1] = timer->timeout[0];
+
+   _timerAdd(timer, timerFx, NULL);
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-static void fxTask1(void* arg)
+static void taskFx1(void* arg)
 {
    for (;;)
    {
       bool peek = (rand() % 10) == 0;
       uint8_t x;
 
+      if (kernelLocked())
+         puts("queue error 2");
+
       if (queuePop(&queue1, true, peek, &x, rand() % 50))
       {
          if (x != x1[1])
          {
-            puts("queue error 2");
+            puts("queue error 3");
             x1[1] = x;
          }
          else if (!peek)
@@ -100,11 +108,11 @@ static void fxTask1(void* arg)
       if (queuePop(&queue3, true, false, &x, 0))
       {
          if (x != 0)
-            puts("queue error 3");
+            puts("queue error 4");
       }
       else
       {
-         puts("queue error 4");
+         puts("queue error 5");
       }
 
       taskSleep(rand() % 100);
@@ -114,13 +122,17 @@ static void fxTask1(void* arg)
 /****************************************************************************
  *
  ****************************************************************************/
-static void fxTask2(void* arg)
+static void taskFx2(void* arg)
 {
    for (;;)
    {
       uint8_t x = 0;
+
+      if (kernelLocked())
+         puts("queue error 6");
+
       if (!queuePush(&queue3, true, &x, -1))
-         puts("queue error 5");
+         puts("queue error 7");
    }
 }
 
@@ -141,7 +153,11 @@ void queueTestCmd(int argc, char* argv[])
  ****************************************************************************/
 void queueTest()
 {
-   timerAdd(&timer, NULL, fxTimer, NULL, 0, rand() % 100);
-   taskStart(&task2, fxTask2, NULL, TASK_HIGH_PRIORITY);
-   taskStart(&task1, fxTask1, NULL, TASK_LOW_PRIORITY);
+   timer.timeout[0] = rand() % 100;
+   timer.timeout[1] = timer.timeout[0];
+
+   timerAdd(&timer, timerFx, NULL);
+
+   taskStart(&task2, taskFx2, NULL);
+   taskStart(&task1, taskFx1, NULL);
 }

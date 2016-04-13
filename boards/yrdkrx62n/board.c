@@ -38,15 +38,11 @@
 #include "queue_test.h"
 #include "readline/readline.h"
 #include "readline/history.h"
+//#include "rspi.h"
 #include "semaphore_test.h"
 #include "shell/shell.h"
 #include "timer_test.h"
 #include "uart/rx62n_uart.h"
-
-/****************************************************************************
- *
- ****************************************************************************/
-#define DYNAMIC_TICK
 
 /****************************************************************************
  *
@@ -89,6 +85,9 @@ static void heapInfoCmd(int argc, char* argv[])
    mutexLock(&mutex, -1);
    heapInfo(&heap, &fragments, &total, &max);
    mutexUnlock(&mutex);
+
+   printf("fragments: %u, total: %uKB, max: %uKB\n", fragments,
+          total / 1024, max / 1024);
 }
 
 /****************************************************************************
@@ -108,40 +107,49 @@ static const ShellCmd SHELL_CMDS[] =
 /****************************************************************************
  *
  ****************************************************************************/
-void taskTimer(unsigned long ticks)
+unsigned long taskScheduleTick(bool adj, unsigned long ticks)
 {
-#ifdef DYNAMIC_TICK
-   CMSTR0 = 0x0000;
+   uint16_t tickClks = PCLK / TASK_TICK_HZ / 128;
+   uint16_t maxTicks = 0xFFFF / tickClks;
+   uint16_t elasped = 0;
+   uint16_t remain = 0;
 
-   if (ticks)
+   if (ticks > maxTicks)
+      ticks = maxTicks;
+
+   CMSTR0 &= ~0x0001;
+
+   if (adj)
    {
-      unsigned long factor = PCLK / 128 / 1000;
+      elasped = CMT0_CMCNT / tickClks;
+      remain = CMT0_CMCNT % tickClks;
+   }
 
-      if ((ticks * factor) > 0xFFFF)
-         ticks = 0xFFFF / factor;
-
+   if (ticks > 0)
+   {
       if (MSTPCRA & (1 << 15))
       {
          MSTPCRA &= ~(1 << 15);
          CMT0_CMCR = 0x00C2;
       }
 
-      CMT0_CMCOR = ticks * factor;
-      CMSTR0 = 0x0001;
+      CMT0_CMCOR = ticks * tickClks;
+      CMT0_CMCNT = remain;
+      CMSTR0 |= 0x0001;
    }
    else
    {
       MSTPCRA |= 1 << 15;
    }
-#endif
+
+   return elasped;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-void taskWait()
+void taskIdle()
 {
-   __asm__ __volatile__("nop");
    __asm__ __volatile__("nop");
    __asm__ __volatile__("nop");
    __asm__ __volatile__("nop");
@@ -154,7 +162,7 @@ void taskWait()
  ****************************************************************************/
 void IRQ _CMI0()
 {
-   unsigned long ticks = CMT0_CMCOR / (PCLK / 128 / 1000);
+   unsigned long ticks = CMT0_CMCOR / (PCLK / TASK_TICK_HZ / 128);
 
    _taskTick(ticks);
    sys_tick(ticks);
@@ -191,12 +199,9 @@ void IRQ _TXI2()
  ****************************************************************************/
 void* malloc(size_t size)
 {
-   void* ptr = NULL;
-
    mutexLock(&mutex, -1);
-   ptr = heapMalloc(&heap, size, 0);
+   void* ptr = heapMalloc(&heap, size, 0);
    mutexUnlock(&mutex);
-
    return ptr;
 }
 
@@ -208,7 +213,6 @@ void* realloc(void* ptr, size_t size)
    mutexLock(&mutex, -1);
    ptr = heapRealloc(&heap, ptr, size, 0, 0);
    mutexUnlock(&mutex);
-
    return ptr;
 }
 
@@ -245,23 +249,20 @@ int main(void* stack, unsigned long size)
    PORTC_DDR = 0x7F;
    PFENET = 0x82;
    PFFSCI |= 0x04;
+   PFGSPI = 0xFE;
    PORT5_ICR |= 0x04;
    PORTA_ICR |= 0x28;
    PORTB_ICR |= 0x8F;
+   PORTC_ICR |= 0x80;
 
    heapCreate(&heap, _data_end__, 64 * 1024 - (unsigned long) _data_end__);
    taskInit(&task0, "main", TASK_HIGH_PRIORITY, stack, size);
    uartInit(&uart2, PCLK, 115200, UART_DPS_8N1);
    libcInit(&uart2.dev);
+   //rspiInit();
    tcpip_init(NULL, NULL);
    ethInit(&phy, mac, NULL, NULL, NULL, true);
 
-#ifndef DYNAMIC_TICK
-   MSTPCRA &= ~(1 << 15);
-   CMT0_CMCR = 0x00C2;
-   CMT0_CMCOR = PCLK / 128 / 1000;
-   CMSTR0 |= 0x0001;
-#endif
    IPR[4] = KERNEL_IPL;
    IER[28 / 8] = (1 << (28 % 8));
 

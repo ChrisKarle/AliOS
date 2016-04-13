@@ -69,7 +69,7 @@ static SP804 sp804 = SP804_CREATE(0x101E2000);
 static LAN91C lan91c = LAN91C_CREATE(0x10010000);
 
 static HistoryData historyData = HISTORY_DATA(10);
-static Task httpTask = TASK_CREATE("httpd", 2048);
+static Task httpTask = TASK_CREATE("httpd", TASK_LOW_PRIORITY, 2048);
 
 static MMU mmu;
 static Task task0;
@@ -123,11 +123,11 @@ static const HTTPCallback HTTP_CALLBACKS[] =
 /****************************************************************************
  *
  ****************************************************************************/
-static void taskTick(HWTimer* timer)
+static void timerCallback(HWTimer* _timer)
 {
    unsigned long tickClks = sp804.timer.clk / TASK_TICK_HZ;
-   sys_tick(timer->loadValue / tickClks);
-   _taskTick(timer->loadValue / tickClks);
+   sys_tick(sp804.timer.loadValue / tickClks);
+   _taskTick(sp804.timer.loadValue / tickClks);
    _taskPreempt(true);
 }
 
@@ -148,29 +148,36 @@ void mmuFreePage(void* page) {}
 /****************************************************************************
  *
  ****************************************************************************/
-void taskTimer(unsigned long ticks)
+unsigned long taskScheduleTick(bool adj, unsigned long ticks)
 {
    unsigned long tickClks = sp804.timer.clk / TASK_TICK_HZ;
    unsigned long maxTicks = sp804.timer.max / tickClks;
+   unsigned long elasped = 0;
+   unsigned long remain = 0;
 
    if (ticks > maxTicks)
       ticks = maxTicks;
 
+   if (adj)
+   {
+      elasped = sp804.timer.loadValue - sp804.timer.value(&sp804.timer);
+      remain = elasped % tickClks;
+      elasped /= tickClks;
+   }
+
    if (ticks > 0)
    {
-      sp804.timer.load(&sp804.timer, ticks * tickClks);
+      sp804.timer.load(&sp804.timer, ticks * tickClks - remain);
       sp804.timer.enable(&sp804.timer, true);
    }
-   else
-   {
-      sp804.timer.enable(&sp804.timer, false);
-   }
+
+   return elasped;
 }
 
 /****************************************************************************
  *
  ****************************************************************************/
-void taskWait()
+void taskIdle()
 {
    unsigned long unused;
    __asm__ __volatile__("mcr p15, 0, %0, c7, c0, 4" : "=r" (unused));
@@ -206,8 +213,8 @@ int main(void* vectors, void* stack, unsigned long stackSize)
 
    sp804Init(&sp804, 1000000);
    vic.ctrl.addHandler(&vic.ctrl, 4, sp804IRQ, &sp804, false, 1);
-   sp804.timer.callback = taskTick;
-   sp804.timer.periodic = true;
+   sp804.timer.callback = timerCallback;
+   sp804.timer.periodic = false;
 
    tcpip_init(NULL, NULL);
    lan91cInit(&lan91c, NULL, NULL, NULL, true);
@@ -225,7 +232,7 @@ int main(void* vectors, void* stack, unsigned long stackSize)
    httpServer.callbacks = HTTP_CALLBACKS;
    httpServer.root = NULL;
    httpServer.index = "index.xhtml";
-   taskStart(&httpTask, httpServerFx, &httpServer, TASK_LOW_PRIORITY);
+   taskStart(&httpTask, httpServerFx, &httpServer);
 
    taskSetData(HISTORY_DATA_ID, &historyData);
    shellRun(SHELL_CMDS);

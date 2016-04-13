@@ -299,12 +299,12 @@ void sys_mutex_set_invalid(sys_mutex_t* mutex)
 sys_thread_t sys_thread_new(const char* name, void (*thread)(void* arg),
                             void* arg, int stackSize, int priority)
 {
-   Task* task = taskCreate(name, stackSize, true);
+   Task* task = taskCreate(name, priority, stackSize, true);
 
    if (kernelLocked())
-      _taskStart(task, thread, arg, priority);
+      _taskStart(task, thread, arg);
    else
-      taskStart(task, thread, arg, priority);
+      taskStart(task, thread, arg);
 
    return task;
 }

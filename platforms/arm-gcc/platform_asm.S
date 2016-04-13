@@ -51,8 +51,7 @@ testAndSet:
    cmp r3, r1
    ldr r3, =1
    strexeq r3, r2, [r0]
-   cmp r3, #0
-   bne testAndSet
+   eor r0, r3, #1
    bx lr
 #endif
 
@@ -63,12 +62,10 @@ testAndSet:
    .p2align 2
    .global __taskSwitch
 __taskSwitch:
-   mrs r2, CPSR
-   push {r0-r12,lr}
+   push {r4-r11,lr}
    str sp, [r0]
    mov sp, r1
-   pop {r0-r12,lr}
-   msr CPSR, r2
+   pop {r4-r11,lr}
    bx lr
 
 /****************************************************************************

@@ -28,8 +28,6 @@
 #ifndef BOARD_H
 #define BOARD_H
 
-#include <stdlib.h>
-
 /****************************************************************************
  *
  ****************************************************************************/
@@ -40,16 +38,17 @@
 #define SEMAPHORE_TEST1_STACK_SIZE 256
 #define SEMAPHORE_TEST2_STACK_SIZE 256
 #define SEMAPHORE_TEST3_STACK_SIZE 256
-#define TIMER_TEST1_STACK_SIZE     128
+#define TIMER_TEST1_STACK_SIZE     256
 #define TIMER_TEST2_STACK_SIZE     256
 
 /****************************************************************************
- * Note: Task preemption is rarely needed.
+ *
  ****************************************************************************/
 #define TASK_PREEMPTION   0
 #define TASK_LIST         1
 #define TASK_STACK_USAGE  1
 #define TASK_NUM_TASKDATA 2
+#define TASK_TICK_HZ      1000
 #define TASK0_STACK_SIZE  512
 
 /****************************************************************************
@@ -58,15 +57,5 @@
 #define TASK_HIGH_PRIORITY  0
 #define TASK_LOW_PRIORITY   1
 #define TASK_NUM_PRIORITIES 2
-
-/****************************************************************************
- *
- ****************************************************************************/
-void taskTimer(unsigned long ticks);
-
-/****************************************************************************
- *
- ****************************************************************************/
-void taskWait();
 
 #endif

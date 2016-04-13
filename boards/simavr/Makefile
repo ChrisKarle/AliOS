@@ -61,6 +61,7 @@ run: $(ELF_FILE) ./simavr/simavr
 ##############################################################################
 #
 ##############################################################################
+#C_FLAGS = -Wall -g -mmcu=atmega1280 -fpack-struct -std=c99 -DF_CPU=8000000
 C_FLAGS = -Wall -Os -mmcu=atmega1280 -fpack-struct -std=c99 -DF_CPU=8000000
 LD_FLAGS = -mmcu=atmega1280 -Wl,-Map=$(MAP_FILE)
 INCLUDES = -I.
