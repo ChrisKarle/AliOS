@@ -164,8 +164,8 @@ void IRQ _CMI0()
 {
    unsigned long ticks = CMT0_CMCOR / (PCLK / TASK_TICK_HZ / 128);
 
+   lwip_tick(ticks);
    _taskTick(ticks);
-   sys_tick(ticks);
 
    _taskPreempt(true);
 }
