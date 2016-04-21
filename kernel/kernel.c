@@ -44,6 +44,15 @@
 /****************************************************************************
  *
  ****************************************************************************/
+#if TASK_PRIORITY_POLARITY
+#define TASK_LOWEND_PRIORITY -1
+#else
+#define TASK_LOWEND_PRIORITY TASK_NUM_PRIORITIES
+#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 #define TASK_FLAG_STARTED 0x01
 #define TASK_FLAG_IDLE    0x02
 #define TASK_FLAG_RESTART 0x04
@@ -261,9 +270,13 @@ static void taskSetReady(Task* task)
 /****************************************************************************
  *
  ****************************************************************************/
-static Task* taskNext(unsigned char priority)
+static Task* taskNext(signed char priority)
 {
-   for (unsigned char i = 0; i < priority; i++)
+#if TASK_PRIORITY_POLARITY
+   for (signed char i = TASK_NUM_PRIORITIES - 1; i > priority; i--)
+#else
+   for (signed char i = 0; i < priority; i++)
+#endif
    {
       if (ready[i].head != NULL)
       {
@@ -409,7 +422,7 @@ static void taskSetTimeout(unsigned char state, unsigned long ticks)
 
    do
    {
-      task = taskNext(TASK_NUM_PRIORITIES);
+      task = taskNext(TASK_LOWEND_PRIORITY);
 
       if (task != NULL)
       {
@@ -497,7 +510,7 @@ static void taskCancelTimeout(Task* task)
 /****************************************************************************
  *
  ****************************************************************************/
-Task* taskCreate(const char* name, unsigned char priority,
+Task* taskCreate(const char* name, signed char priority,
                  unsigned long stackSize, bool freeOnExit)
 {
    Task* task = kmalloc(sizeof(Task));
@@ -614,7 +627,7 @@ void taskExit()
 
    for (;;)
    {
-      Task* task = taskNext(TASK_NUM_PRIORITIES);
+      Task* task = taskNext(TASK_LOWEND_PRIORITY);
 
       if (task != NULL)
       {
@@ -665,7 +678,7 @@ void taskSleep(unsigned long ticks)
 /****************************************************************************
  *
  ****************************************************************************/
-static void __taskPriority(Task* task, unsigned char priority)
+static void __taskPriority(Task* task, signed char priority)
 {
    if (task == NULL)
       task = current;
@@ -739,7 +752,7 @@ static void __taskPriority(Task* task, unsigned char priority)
 /****************************************************************************
  *
  ****************************************************************************/
-void _taskPriority(Task* task, unsigned char priority)
+void _taskPriority(Task* task, signed char priority)
 {
    _smpLock();
    __taskPriority(task, priority);
@@ -749,7 +762,7 @@ void _taskPriority(Task* task, unsigned char priority)
 /****************************************************************************
  *
  ****************************************************************************/
-void taskPriority(Task* task, unsigned char priority)
+void taskPriority(Task* task, signed char priority)
 {
    kernelLock();
 
@@ -865,7 +878,11 @@ void _taskPreempt(bool yield)
 {
    _smpLock();
 
+#if TASK_PRIORITY_POLARITY
+   Task* task = taskNext(yield ? current->priority - 1 : current->priority);
+#else
    Task* task = taskNext(yield ? current->priority + 1 : current->priority);
+#endif
 
    if (task != NULL)
       taskSwitch(task);
@@ -1072,7 +1089,7 @@ static void taskPrint(Task* task)
    printf("%-12s", state);
 #endif
 
-   printf("%-5u", task->priority);
+   printf("%-5d", task->priority);
    printf("%-5x", task->flags);
 
    if (inactive != NULL)
@@ -1153,7 +1170,7 @@ void taskList()
 /****************************************************************************
  *
  ****************************************************************************/
-void taskInit(Task* task, const char* name, unsigned char priority,
+void taskInit(Task* task, const char* name, signed char priority,
               void* stackBase, unsigned long stackSize)
 {
    task->name = name;
@@ -1991,7 +2008,11 @@ bool mutexLock(Mutex* mutex, unsigned long ticks)
          current->inactive.arg0 = mutex;
          current->inactive.arg1 = &success;
 
+#if TASK_PRIORITY_POLARITY
+         if (current->priority > mutex->owner->priority)
+#else
          if (current->priority < mutex->owner->priority)
+#endif
             __taskPriority(mutex->owner, current->priority);
 
          mutexAddTask(mutex, current);

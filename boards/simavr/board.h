@@ -54,8 +54,9 @@
 /****************************************************************************
  *
  ****************************************************************************/
-#define TASK_HIGH_PRIORITY  0
-#define TASK_LOW_PRIORITY   1
-#define TASK_NUM_PRIORITIES 2
+#define TASK_PRIORITY_POLARITY 1
+#define TASK_NUM_PRIORITIES    2
+#define TASK_HIGH_PRIORITY     1
+#define TASK_LOW_PRIORITY      0
 
 #endif

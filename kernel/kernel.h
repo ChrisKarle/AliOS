@@ -37,6 +37,13 @@
 /****************************************************************************
  *
  ****************************************************************************/
+#ifndef TASK_PRIORITY_POLARITY
+#define TASK_PRIORITY_POLARITY 0
+#endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
 #ifndef TASK_PREEMPTION
 #define TASK_PREEMPTION 0
 #endif
@@ -75,6 +82,7 @@
  * Arguments:
  *    name      - name of task (must be const, non-local pointer)
  *    priority  - lower integer values represent higher priorities
+ *                unless TASK_PRIORITY_POLARITY = 1
  *    stackSize - stack size in bytes
  ****************************************************************************/
 #define TASK_CREATE(name, priority, stackSize)       \
@@ -128,7 +136,7 @@ typedef struct TaskData
 typedef struct Task
 {
    const char* name;
-   unsigned char priority;
+   signed char priority;
    unsigned char state;
    unsigned char flags;
    unsigned char cpu;
@@ -178,6 +186,7 @@ typedef struct Task
  * Arguments:
  *    name       - name of task (must be const, non-local pointer)
  *    priority   - lower integer values represent higher priorities
+ *                 unless TASK_PRIORITY_POLARITY = 1
  *    stackSize  - stack size in bytes
  *    freeOnExit - free task container on task exit
  * Returns:
@@ -185,7 +194,7 @@ typedef struct Task
  * Notes:
  *    - Should not be called from interrupt context because of kmalloc usage.
  ****************************************************************************/
-Task* taskCreate(const char* name, unsigned char priority,
+Task* taskCreate(const char* name, signed char priority,
                  unsigned long stackSize, bool freeOnExit);
 #endif
 
@@ -285,7 +294,7 @@ void taskSleep(unsigned long ticks);
  * Notes:
  *    - Use ONLY within interrupt context.
  ****************************************************************************/
-void _taskPriority(Task* task, unsigned char priority);
+void _taskPriority(Task* task, signed char priority);
 
 /****************************************************************************
  * Function: taskPriority
@@ -296,7 +305,7 @@ void _taskPriority(Task* task, unsigned char priority);
  * Notes:
  *    - Do NOT use within interrupt context.
  ****************************************************************************/
-void taskPriority(Task* task, unsigned char priority);
+void taskPriority(Task* task, signed char priority);
 
 /****************************************************************************
  * Function: taskSetData
@@ -374,7 +383,7 @@ void taskList();
  *    stackBase - base/bottom of stack
  *    stackSize - size of stack in bytes
  ****************************************************************************/
-void taskInit(Task* task, const char* name, unsigned char priority,
+void taskInit(Task* task, const char* name, signed char priority,
               void* stackBase, unsigned long stackSize);
 
 /****************************************************************************
@@ -946,7 +955,7 @@ typedef struct
 {
 	const char* name;
 	unsigned int count;
-	unsigned char priority;
+	signed char priority;
 	Task* owner;
 	Task* task;
 
