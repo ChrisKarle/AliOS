@@ -239,6 +239,18 @@ bool taskStart(Task* task, void (*fx)(void*), void* arg);
  ****************************************************************************/
 void taskExit();
 
+/****************************************************************************
+ * Function: taskChain
+ *    - Ends execution of the current task and begin a new task.
+ * Arguments:
+ *    fx   - pointer to task function
+ *    arg  - argument to pass to task function
+ * Notes:
+ *    - Should not be called from within a periodic timer task.
+ *    - Do NOT use within interrupt context.
+ ****************************************************************************/
+void taskChain(void (*fx)(void*), void* arg);
+
 #if TASK_AT_EXIT && defined(krealloc)
 /****************************************************************************
  * Function: taskAtExit

@@ -650,6 +650,18 @@ void taskExit()
    }
 }
 
+/****************************************************************************
+ *
+ ****************************************************************************/
+void taskChain(void (*fx)(void*), void* arg)
+{
+   current->flags |= TASK_FLAG_RESTART;
+   current->start.fx = fx;
+   current->start.arg = arg;
+
+   taskExit();
+}
+
 #if TASK_AT_EXIT && defined(krealloc)
 /****************************************************************************
  *
