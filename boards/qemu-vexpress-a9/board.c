@@ -89,11 +89,9 @@ static void timerCallback(HWTimer* timer)
 {
    unsigned long tickClks = sp804.timer.clk / TASK_TICK_HZ;
    _taskTick(sp804.timer.loadValue / tickClks);
-#if TASK_PREEMPTION
    _taskPreempt(true);
 #ifdef SMP
    gicSGI(&gic, -1, 1);
-#endif
 #endif
 }
 
@@ -103,10 +101,8 @@ static void timerCallback(HWTimer* timer)
  ****************************************************************************/
 static void smpIRQ(unsigned int n, void* arg)
 {
-#if TASK_PREEMPTION
    if (n > 0)
       _taskPreempt(true);
-#endif
 }
 
 /****************************************************************************

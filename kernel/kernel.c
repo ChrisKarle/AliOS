@@ -54,8 +54,9 @@
  *
  ****************************************************************************/
 #define TASK_FLAG_STARTED 0x01
-#define TASK_FLAG_IDLE    0x02
-#define TASK_FLAG_RESTART 0x04
+#define TASK_FLAG_RESTART 0x02
+#define TASK_FLAG_PREEMPT 0x04
+#define TASK_FLAG_IDLE    0x08
 #define TASK_FLAG_MALLOC  0x10
 #define TASK_FLAG_FREE    0x20
 
@@ -536,7 +537,7 @@ Task* taskCreate(const char* name, signed char priority,
  ****************************************************************************/
 static void __taskEntry()
 {
-   current->flags = TASK_FLAG_STARTED;
+   current->flags |= TASK_FLAG_STARTED;
 #ifdef SMP
    current->cpu = (unsigned char) cpuID();
 #endif
@@ -555,6 +556,10 @@ static bool __taskStart(Task* task, void (*fx)(void*), void* arg)
 
    if (task->priority >= TASK_NUM_PRIORITIES)
       task->priority = TASK_NUM_PRIORITIES - 1;
+
+#if TASK_PREEMPTION
+   task->flags |= TASK_FLAG_PREEMPT;
+#endif
 
    task->start.fx = fx;
    task->start.arg = arg;
@@ -882,26 +887,34 @@ void* taskGetData(int id)
    return NULL;
 }
 
-#if TASK_PREEMPTION
 /****************************************************************************
  *
  ****************************************************************************/
 void _taskPreempt(bool yield)
 {
-   _smpLock();
+   if (current->flags & TASK_FLAG_PREEMPT)
+   {
+      signed char priority = current->priority;
 
+      if (yield)
+      {
 #if TASK_PRIORITY_POLARITY
-   Task* task = taskNext(yield ? current->priority - 1 : current->priority);
+         priority--;
 #else
-   Task* task = taskNext(yield ? current->priority + 1 : current->priority);
+         priority++;
 #endif
+      }
 
-   if (task != NULL)
-      taskSwitch(task);
+      _smpLock();
 
-   _smpUnlock();
+      Task* task = taskNext(priority);
+
+      if (task != NULL)
+         taskSwitch(task);
+
+      _smpUnlock();
+   }
 }
-#endif
 
 /****************************************************************************
  *
@@ -1102,7 +1115,7 @@ static void taskPrint(Task* task)
 #endif
 
    printf("%-5d", task->priority);
-   printf("%-5x", task->flags);
+   printf("%-5X", task->flags);
 
    if (inactive != NULL)
       printf("%-17s", inactive);

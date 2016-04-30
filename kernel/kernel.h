@@ -346,7 +346,6 @@ bool taskSetData(int id, void* ptr);
  ****************************************************************************/
 void* taskGetData(int id);
 
-#if TASK_PREEMPTION
 /****************************************************************************
  * Function: _taskPreempt
  *    - Preempts the current task.
@@ -357,9 +356,6 @@ void* taskGetData(int id);
  *    - Use ONLY within interrupt context.
  ****************************************************************************/
 void _taskPreempt(bool yield);
-#else
-#define _taskPreempt(yield)
-#endif
 
 /****************************************************************************
  * Function: _taskTick
