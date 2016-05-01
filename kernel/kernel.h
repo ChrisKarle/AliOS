@@ -94,7 +94,7 @@
    0,                                                \
    {NULL, NULL},                                     \
    {stackSize, (unsigned char[stackSize]) {}, NULL}, \
-   {0, NULL, NULL, NULL},                            \
+   {0, NULL},                                        \
    {},                                               \
    NULL,                                             \
    NULL                                              \
@@ -159,9 +159,7 @@ typedef struct Task
    struct
    {
       unsigned long timeout;
-      struct Task* next;
-      void* arg0;
-      void* arg1;
+      struct TaskPoll* poll;
 
    } inactive;
 
@@ -1023,5 +1021,34 @@ bool mutexLock(Mutex* mutex, unsigned long ticks);
  ****************************************************************************/
 void mutexUnlock(Mutex* mutex);
 #endif
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+typedef struct TaskPoll
+{
+   union
+   {
+#if QUEUES
+      Queue* queue;
+#endif
+#if SEMAPHORES
+      Semaphore* semaphore;
+#endif
+#if MUTEXES
+      Mutex* mutex;
+#endif
+   } type;
+
+   union
+   {
+      void* ptr;
+      bool success;
+
+   } data;
+
+   Task* next;
+
+} TaskPoll;
 
 #endif
