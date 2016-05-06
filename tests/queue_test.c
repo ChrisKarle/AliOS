@@ -70,7 +70,7 @@ static void timerFx(Timer* timer)
       }
    }
 
-   timer->timeout[0] = rand() % 100;
+   timer->timeout[0] = rand() % 250;
    timer->timeout[1] = timer->timeout[0];
 
    _timerAdd(timer, timerFx, NULL);
@@ -115,7 +115,7 @@ static void taskFx1(void* arg)
          puts("queue error 5");
       }
 
-      taskSleep(rand() % 100);
+      taskSleep(rand() % 250);
    }
 }
 
@@ -146,6 +146,8 @@ void queueTestCmd(int argc, char* argv[])
 
    if (((x1[0] - x1[1]) <= 3) && ((x2[0] - x2[1]) <= 3))
       puts("queue ok");
+   else
+      puts("queue error!");
 }
 
 /****************************************************************************
@@ -153,7 +155,7 @@ void queueTestCmd(int argc, char* argv[])
  ****************************************************************************/
 void queueTest()
 {
-   timer.timeout[0] = rand() % 100;
+   timer.timeout[0] = rand() % 250;
    timer.timeout[1] = timer.timeout[0];
 
    timerAdd(&timer, timerFx, NULL);

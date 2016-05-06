@@ -87,6 +87,7 @@
  ****************************************************************************/
 #define TASK_CREATE(name, priority, stackSize)       \
 {                                                    \
+   NULL,                                             \
    name,                                             \
    priority,                                         \
    TASK_STATE_INIT,                                  \
@@ -94,9 +95,8 @@
    0,                                                \
    {NULL, NULL},                                     \
    {stackSize, (unsigned char[stackSize]) {}, NULL}, \
-   {0, NULL},                                        \
+   {0, NULL, 0},                                     \
    {},                                               \
-   NULL,                                             \
    NULL                                              \
 }
 
@@ -123,10 +123,10 @@
  ****************************************************************************/
 typedef struct TaskData
 {
+   struct TaskData* next;
+
    int id;
    void* ptr;
-
-   struct TaskData* next;
 
 } TaskData;
 
@@ -135,6 +135,8 @@ typedef struct TaskData
  ****************************************************************************/
 typedef struct Task
 {
+   struct Task* next;
+
    const char* name;
    signed char priority;
    unsigned char state;
@@ -144,7 +146,7 @@ typedef struct Task
    struct
    {
       void (*fx)(void*);
-	  void* arg;
+      void* arg;
 
    } start;
 
@@ -160,6 +162,7 @@ typedef struct Task
    {
       unsigned long timeout;
       struct TaskPoll* poll;
+      unsigned int size;
 
    } inactive;
 
@@ -173,9 +176,21 @@ typedef struct Task
 
    TaskData* data;
 
-   struct Task* next;
-
 } Task;
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+typedef struct TaskPoll
+{
+   struct TaskPoll* next;
+   Task* task;
+   void* source;
+   bool success;
+   bool arg0;
+   void* arg1;
+
+} TaskPoll;
 
 #ifdef kmalloc
 /****************************************************************************
@@ -546,10 +561,10 @@ void kernelUnlock();
  ****************************************************************************/
 #define TIMER_CREATE(flags, timeout, task) \
 {                                          \
+   NULL,                                   \
    flags,                                  \
    {timeout, timeout},                     \
    task,                                   \
-   NULL,                                   \
    NULL,                                   \
    NULL                                    \
 }
@@ -579,12 +594,12 @@ void kernelUnlock();
  ****************************************************************************/
 typedef struct Timer
 {
+   struct Timer* next;
    volatile unsigned char flags;
    unsigned long timeout[2];
    Task* task;
    void (*fx)(struct Timer* timer);
    void* arg;
-   struct Timer* next;
 
 } Timer;
 
@@ -683,13 +698,13 @@ void timerCancel(Timer* timer);
  ****************************************************************************/
 #define QUEUE_CREATE(name, elementSize, maxElements) \
 {                                                    \
+   NULL,                                             \
    name,                                             \
    elementSize,                                      \
    maxElements,                                      \
    0,                                                \
    0,                                                \
-   (unsigned char[elementSize * maxElements]) {},    \
-   NULL                                              \
+   (unsigned char[elementSize * maxElements]) {}     \
 }
 
 /****************************************************************************
@@ -703,13 +718,13 @@ void timerCancel(Timer* timer);
  ****************************************************************************/
 typedef struct
 {
+   TaskPoll* poll;
    const char* name;
    unsigned int size;
    unsigned int max;
    unsigned int count;
    unsigned int index;
    unsigned char* buffer;
-   Task* task;
 
 } Queue;
 
@@ -832,10 +847,10 @@ bool queuePop(Queue* queue, bool head, bool peek, void* dst,
  ****************************************************************************/
 #define SEMAPHORE_CREATE(name, count, max) \
 {                                          \
+   NULL,                                   \
    name,                                   \
    count,                                  \
-   max,                                    \
-   NULL                                    \
+   max                                     \
 }
 
 /****************************************************************************
@@ -849,10 +864,10 @@ bool queuePop(Queue* queue, bool head, bool peek, void* dst,
  ****************************************************************************/
 typedef struct
 {
-	const char* name;
-	unsigned int count;
-	unsigned int max;
-	Task* task;
+   TaskPoll* poll;
+   const char* name;
+   unsigned int count;
+   unsigned int max;
 
 } Semaphore;
 
@@ -924,6 +939,23 @@ bool semaphoreGive(Semaphore* semaphore);
  *    - Do NOT use within interrupt context.
  ****************************************************************************/
 bool semaphoreTake(Semaphore* semaphore, unsigned long ticks);
+
+/****************************************************************************
+ * Function: semaphoreTake2
+ *    - Takes/consumes a semaphore signal from multiple sources.
+ * Arguments:
+ *    poll  - array of TaskPoll structures with "source" element populated
+ *    size  - size of poll array
+ *    ticks - number of ticks to wait until semaphore becomes available
+ *            (-1 == wait forever)
+ * Returns:
+ *    - index of semaphore / -1 if timeout
+ * Notes:
+ *    - If multiple semaphores are ready/active, the lowest index semaphore
+ *      will be consumed and that index returned.
+ *    - Do NOT use within interrupt context.
+ ****************************************************************************/
+int semaphoreTake2(struct TaskPoll* poll, int size, unsigned long ticks);
 #endif
 
 /****************************************************************************
@@ -942,10 +974,10 @@ bool semaphoreTake(Semaphore* semaphore, unsigned long ticks);
  ****************************************************************************/
 #define MUTEX_CREATE(name) \
 {                          \
+   NULL,                   \
    name,                   \
    0,                      \
    0,                      \
-   NULL,                   \
    NULL                    \
 }
 
@@ -959,11 +991,11 @@ bool semaphoreTake(Semaphore* semaphore, unsigned long ticks);
  ****************************************************************************/
 typedef struct
 {
-	const char* name;
-	unsigned int count;
-	signed char priority;
-	Task* owner;
-	Task* task;
+   TaskPoll* poll;
+   const char* name;
+   unsigned int count;
+   signed char priority;
+   Task* owner;
 
 } Mutex;
 
@@ -1021,34 +1053,5 @@ bool mutexLock(Mutex* mutex, unsigned long ticks);
  ****************************************************************************/
 void mutexUnlock(Mutex* mutex);
 #endif
-
-/****************************************************************************
- *
- ****************************************************************************/
-typedef struct TaskPoll
-{
-   union
-   {
-#if QUEUES
-      Queue* queue;
-#endif
-#if SEMAPHORES
-      Semaphore* semaphore;
-#endif
-#if MUTEXES
-      Mutex* mutex;
-#endif
-   } type;
-
-   union
-   {
-      void* ptr;
-      bool success;
-
-   } data;
-
-   Task* next;
-
-} TaskPoll;
 
 #endif

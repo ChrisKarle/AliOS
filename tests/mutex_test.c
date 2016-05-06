@@ -56,11 +56,11 @@ static void taskFx1(void* arg)
 
       x[0]++;
       x[1]++;
-      taskSleep(rand() % 100);
+      taskSleep(rand() % 250);
       x[0]++;
       x[1]++;
 
-      if ((mutex.task != NULL) && (task1.priority != TASK_HIGH_PRIORITY))
+      if ((mutex.poll != NULL) && (task1.priority != TASK_HIGH_PRIORITY))
          puts("mutex error 2");
 
       mutexUnlock(&mutex);
@@ -84,7 +84,7 @@ static void taskFx2(void* arg)
       {
          x[0]++;
          x[2]++;
-         taskSleep(rand() % 100);
+         taskSleep(rand() % 250);
          x[0]++;
          x[2]++;
 

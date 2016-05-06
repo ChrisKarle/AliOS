@@ -47,7 +47,8 @@ static Task task3 = TASK_CREATE("semaphore_test3",
                                 TASK_HIGH_PRIORITY,
                                 SEMAPHORE_TEST3_STACK_SIZE);
 static Timer timer = TIMER_CREATE(0, 0, NULL);
-static unsigned long x[3] = {0, 0, 0};
+static unsigned long x[2] = {0, 0};
+static unsigned long y[2] = {0, 0};
 
 /****************************************************************************
  *
@@ -57,7 +58,7 @@ static void timerFx(Timer* timer)
    if (_semaphoreGive(&semaphore1))
       x[0]++;
 
-   timer->timeout[0] = rand() % 100;
+   timer->timeout[0] = rand() % 250;
    timer->timeout[1] = timer->timeout[0];
 
    _timerAdd(timer, timerFx, NULL);
@@ -68,14 +69,27 @@ static void timerFx(Timer* timer)
  ****************************************************************************/
 static void taskFx1(void* arg)
 {
+   TaskPoll poll[2];
+
+   poll[0].source = &semaphore1;
+   poll[1].source = &semaphore2;
+
    for (;;)
    {
-      semaphoreTake(&semaphore2, -1);
-      semaphoreTake(&semaphore1, -1);
+      switch (semaphoreTake2(poll, 2, rand() % 250))
+      {
+         case 0:
+            kernelLock();
+            y[0]++;
+            kernelUnlock();
+            break;
 
-      x[1]++;
+         case 1:
+            y[1]++;
+            break;
+      }
 
-      taskSleep(rand() % 100);
+      taskSleep(rand() % 250);
 
       if (kernelLocked())
          puts("semaphore error 1");
@@ -89,10 +103,14 @@ static void taskFx2(void* arg)
 {
    for (;;)
    {
-      if (semaphoreTake(&semaphore1, rand() % 50))
-         x[2]++;
+      if (semaphoreTake(&semaphore1, rand() % 100))
+      {
+         kernelLock();
+         y[0]++;
+         kernelUnlock();
+      }
 
-      taskSleep(rand() % 100);
+      taskSleep(rand() % 250);
 
       if (kernelLocked())
          puts("semaphore error 2");
@@ -106,9 +124,10 @@ static void taskFx3(void* arg)
 {
    for (;;)
    {
-      semaphoreGive(&semaphore2);
+      if (semaphoreGive(&semaphore2))
+         x[1]++;
 
-      taskSleep(rand() % 100);
+      taskSleep(rand() % 250);
 
       if (kernelLocked())
          puts("semaphore error 3");
@@ -120,10 +139,13 @@ static void taskFx3(void* arg)
  ****************************************************************************/
 void semaphoreTestCmd(int argc, char* argv[])
 {
-   printf("x: %lu, %lu(%lu, %lu)\n", x[0], x[1] + x[2], x[1], x[2]);
+   printf("gives: %lu, %lu\n", x[0], x[1]);
+   printf("takes: %lu, %lu\n", y[0], y[1]);
 
-   if ((x[0] - x[1] - x[2]) <= 2)
+   if (((x[0] + x[1]) - (y[0] + y[1])) <= 3)
       puts("semaphore ok");
+   else
+      puts("semaphore error!");
 }
 
 /****************************************************************************
@@ -131,7 +153,7 @@ void semaphoreTestCmd(int argc, char* argv[])
  ****************************************************************************/
 void semaphoreTest()
 {
-   timer.timeout[0] = rand() % 100;
+   timer.timeout[0] = rand() % 250;
    timer.timeout[1] = timer.timeout[1];
 
    timerAdd(&timer, timerFx, NULL);

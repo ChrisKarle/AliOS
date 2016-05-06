@@ -150,42 +150,6 @@ static void __timerAdd(Timer* timer);
 static Timer* timers;
 #endif
 
-#if QUEUES
-/****************************************************************************
- *
- ****************************************************************************/
-static void queueAddTask(Queue* queue, Task* task);
-
-/****************************************************************************
- *
- ****************************************************************************/
-static bool queueDelTask(Queue* queue, Task* task);
-#endif
-
-#if SEMAPHORES
-/****************************************************************************
- *
- ****************************************************************************/
-static void semaphoreAddTask(Semaphore* semaphore, Task* task);
-
-/****************************************************************************
- *
- ****************************************************************************/
-static bool semaphoreDelTask(Semaphore* semaphore, Task* task);
-#endif
-
-#if MUTEXES
-/****************************************************************************
- *
- ****************************************************************************/
-static void mutexAddTask(Mutex* mutex, Task* task);
-
-/****************************************************************************
- *
- ****************************************************************************/
-static bool mutexDelTask(Mutex* mutex, Task* task);
-#endif
-
 /****************************************************************************
  *
  ****************************************************************************/
@@ -507,6 +471,60 @@ static void taskCancelTimeout(Task* task)
    }
 }
 
+/****************************************************************************
+ *
+ ****************************************************************************/
+static void taskPollAdd(TaskPoll** head, TaskPoll* poll)
+{
+   TaskPoll* previous = NULL;
+   TaskPoll* ptr = *head;
+
+   while (ptr != NULL)
+   {
+      if (poll->task->priority < ptr->task->priority)
+         break;
+
+      previous = ptr;
+      ptr = ptr->next;
+   }
+
+   poll->next = ptr;
+
+   if (previous != NULL)
+      previous->next = poll;
+   else
+      *head = poll;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+static TaskPoll* taskPollDel(TaskPoll** head, Task* task)
+{
+   TaskPoll* previous = NULL;
+   TaskPoll* ptr = *head;
+
+   while (ptr != NULL)
+   {
+      if (ptr->task == task)
+      {
+         if (previous != NULL)
+            previous->next = ptr->next;
+         else
+            *head = ptr->next;
+
+         ptr->next = NULL;
+
+         return ptr;
+      }
+
+      previous = ptr;
+      ptr = ptr->next;
+   }
+
+   return NULL;
+}
+
 #ifdef kmalloc
 /****************************************************************************
  *
@@ -743,24 +761,36 @@ static void __taskPriority(Task* task, signed char priority)
 #if QUEUES
       case TASK_STATE_QUEUE:
          task->priority = priority;
-         if (queueDelTask(task->inactive.poll->type.queue, task))
-            queueAddTask(task->inactive.poll->type.queue, task);
+         for (unsigned int i = 0; i < task->inactive.size; i++)
+         {
+            Queue* queue = task->inactive.poll[i].source;
+            TaskPoll* poll = taskPollDel(&queue->poll, task);
+            taskPollAdd(&queue->poll, poll);
+         }
          break;
 #endif
 
 #if SEMAPHORES
       case TASK_STATE_SEMAPHORE:
          task->priority = priority;
-         if (semaphoreDelTask(task->inactive.poll->type.semaphore, task))
-            semaphoreAddTask(task->inactive.poll->type.semaphore, task);
+         for (unsigned int i = 0; i < task->inactive.size; i++)
+         {
+            Semaphore* semaphore = task->inactive.poll[i].source;
+            TaskPoll* poll = taskPollDel(&semaphore->poll, task);
+            taskPollAdd(&semaphore->poll, poll);
+         }
          break;
 #endif
 
 #if MUTEXES
       case TASK_STATE_MUTEX:
          task->priority = priority;
-         if (mutexDelTask(task->inactive.poll->type.mutex, task))
-            mutexAddTask(task->inactive.poll->type.mutex, task);
+         for (unsigned int i = 0; i < task->inactive.size; i++)
+         {
+            Mutex* mutex = task->inactive.poll[i].source;
+            TaskPoll* poll = taskPollDel(&mutex->poll, task);
+            taskPollAdd(&mutex->poll, poll);
+         }
          break;
 #endif
    }
@@ -1084,7 +1114,7 @@ static void taskPrint(Task* task)
 #if QUEUES
       case TASK_STATE_QUEUE:
          state = "queue";
-         inactive = task->inactive.poll->type.queue->name;
+         inactive = ((Queue*) task->inactive.poll->source)->name;
          timeout = task->inactive.timeout;
          break;
 #endif
@@ -1092,7 +1122,7 @@ static void taskPrint(Task* task)
 #if SEMAPHORES
       case TASK_STATE_SEMAPHORE:
          state = "semaphore";
-         inactive = task->inactive.poll->type.semaphore->name;
+         inactive = ((Semaphore*) task->inactive.poll->source)->name;
          timeout = task->inactive.timeout;
          break;
 #endif
@@ -1100,7 +1130,7 @@ static void taskPrint(Task* task)
 #if MUTEXES
       case TASK_STATE_MUTEX:
          state = "mutex";
-         inactive = task->inactive.poll->type.mutex->name;
+         inactive = ((Mutex*) task->inactive.poll->source)->name;
          timeout = task->inactive.timeout;
          break;
 #endif
@@ -1118,9 +1148,16 @@ static void taskPrint(Task* task)
    printf("%-5X", task->flags);
 
    if (inactive != NULL)
-      printf("%-17s", inactive);
+   {
+      if (task->inactive.size > 1)
+         printf("%-17s,*", inactive);
+      else
+         printf("%-17s", inactive);
+   }
    else
+   {
       printf("%-17s", "");
+   }
 
    if (timeout != -1)
       printf("%-10lu", timeout);
@@ -1448,17 +1485,6 @@ void queueDestroy(Queue* queue)
 /****************************************************************************
  *
  ****************************************************************************/
-typedef struct
-{
-   bool peek;
-   void* dst;
-   bool success;
-
-} Dequeue;
-
-/****************************************************************************
- *
- ****************************************************************************/
 static bool __queuePush(Queue* queue, bool tail, const void* src)
 {
    bool success = false;
@@ -1467,18 +1493,16 @@ static bool __queuePush(Queue* queue, bool tail, const void* src)
    {
       bool insert = true;
 
-      while ((queue->task != NULL) && insert)
+      while ((queue->poll != NULL) && insert)
       {
-         Dequeue* dequeue = queue->task->inactive.poll->data.ptr;
+         if (queue->poll->arg1 != NULL)
+            memcpy(queue->poll->arg1, src, queue->size);
 
-         if (dequeue->dst != NULL)
-            memcpy(dequeue->dst, src, queue->size);
+         insert = queue->poll->arg0;
+         queue->poll->success = true;
 
-         insert = dequeue->peek;
-         dequeue->success = true;
-
-         taskCancelTimeout(queue->task);
-         queue->task = queue->task->inactive.poll->next;
+         taskCancelTimeout(queue->poll->task);
+         queue->poll = queue->poll->next;
       }
 
       if (insert)
@@ -1505,46 +1529,33 @@ static bool __queuePush(Queue* queue, bool tail, const void* src)
 /****************************************************************************
  *
  ****************************************************************************/
-typedef struct
-{
-   bool tail;
-   const void* src;
-   bool success;
-
-} Enqueue;
-
-/****************************************************************************
- *
- ****************************************************************************/
 static bool __queuePop(Queue* queue, bool head, bool peek, void* dst)
 {
    bool success = false;
 
    if (queue->count > 0)
    {
-      const void* src = NULL;
+      void* src = NULL;
 
-      if ((queue->task != NULL) && !peek)
+      if ((queue->poll != NULL) && !peek)
       {
-         Enqueue* enqueue = queue->task->inactive.poll->data.ptr;
-
          if (head)
          {
-            if (enqueue->tail)
+            if (queue->poll->arg0)
             {
                unsigned long i = queue->index++ % queue->max;
                src = &queue->buffer[i * queue->size];
             }
             else
             {
-               src = enqueue->src;
+               src = queue->poll->arg1;
             }
          }
          else
          {
-            if (enqueue->tail)
+            if (queue->poll->arg0)
             {
-               src = enqueue->src;
+               src = queue->poll->arg1;
             }
             else
             {
@@ -1556,13 +1567,13 @@ static bool __queuePop(Queue* queue, bool head, bool peek, void* dst)
          if (dst != NULL)
             memcpy(dst, src, queue->size);
 
-         if (src != enqueue->src)
-            memcpy((void*) src, enqueue->src, queue->size);
+         if (src != queue->poll->arg1)
+            memcpy(src, queue->poll->arg1, queue->size);
 
-         enqueue->success = true;
+         queue->poll->success = true;
 
-         taskCancelTimeout(queue->task);
-         queue->task = queue->task->inactive.poll->next;
+         taskCancelTimeout(queue->poll->task);
+         queue->poll = queue->poll->next;
       }
       else
       {
@@ -1596,58 +1607,6 @@ static bool __queuePop(Queue* queue, bool head, bool peek, void* dst)
 /****************************************************************************
  *
  ****************************************************************************/
-static void queueAddTask(Queue* queue, Task* task)
-{
-   Task* previous = NULL;
-   Task* ptr = queue->task;
-
-   while (ptr != NULL)
-   {
-      if (task->priority < ptr->priority)
-         break;
-
-      previous = ptr;
-      ptr = ptr->inactive.poll->next;
-   }
-
-   task->inactive.poll->next = ptr;
-
-   if (previous != NULL)
-      previous->inactive.poll->next = task;
-   else
-      queue->task = task;
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-static bool queueDelTask(Queue* queue, Task* task)
-{
-   Task* previous = NULL;
-   Task* ptr = queue->task;
-
-   while (ptr != NULL)
-   {
-      if (ptr == task)
-      {
-         if (previous != NULL)
-            previous->inactive.poll->next = task->inactive.poll->next;
-         else
-            queue->task = task->inactive.poll->next;
-
-         return true;
-      }
-
-      previous = ptr;
-      ptr = ptr->inactive.poll->next;
-   }
-
-   return false;
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
 bool _queuePush(Queue* queue, bool tail, const void* src)
 {
    _smpLock();
@@ -1675,26 +1634,27 @@ bool queuePush(Queue* queue, bool tail, const void* src, unsigned long ticks)
    }
    else if (ticks > 0)
    {
-      Enqueue enqueue;
       TaskPoll poll;
 
-      enqueue.tail = tail;
-      enqueue.src = src;
-      enqueue.success = false;
-
-      poll.type.queue = queue;
-      poll.data.ptr = &enqueue;
+      poll.task = current;
+      poll.source = queue;
+      poll.success = false;
+      poll.arg0 = tail;
+      poll.arg1 = (void*) src;
 
       current->inactive.poll = &poll;
+      current->inactive.size = 1;
 
-      queueAddTask(queue, current);
+      taskPollAdd(&queue->poll, &poll);
+
       taskSetTimeout(TASK_STATE_QUEUE, ticks);
-      success = enqueue.success;
+      success = poll.success;
 
       if (!success)
-         queueDelTask(queue, current);
+         taskPollDel(&queue->poll, current);
 
       current->inactive.poll = NULL;
+      current->inactive.size = 0;
    }
 
    kernelUnlock();
@@ -1733,26 +1693,27 @@ bool queuePop(Queue* queue, bool head, bool peek, void* dst,
    }
    else if (ticks > 0)
    {
-      Dequeue dequeue;
       TaskPoll poll;
 
-      dequeue.peek = peek;
-      dequeue.dst = dst;
-      dequeue.success = false;
-
-      poll.type.queue = queue;
-      poll.data.ptr = &dequeue;
+      poll.task = current;
+      poll.source = queue;
+      poll.success = false;
+      poll.arg0 = peek;
+      poll.arg1 = dst;
 
       current->inactive.poll = &poll;
+      current->inactive.size = 1;
 
-      queueAddTask(queue, current);
+      taskPollAdd(&queue->poll, &poll);
+
       taskSetTimeout(TASK_STATE_QUEUE, ticks);
-      success = dequeue.success;
+      success = poll.success;
 
       if (!success)
-         queueDelTask(queue, current);
+         taskPollDel(&queue->poll, current);
 
       current->inactive.poll = NULL;
+      current->inactive.size = 0;
    }
 
    kernelUnlock();
@@ -1771,10 +1732,10 @@ Semaphore* semaphoreCreate(const char* name, unsigned int count,
 {
    Semaphore* semaphore = kmalloc(sizeof(Semaphore));
 
+   memset(semaphore, 0, sizeof(Semaphore));
    semaphore->name = name;
    semaphore->count = count;
    semaphore->max = max;
-   semaphore->task = NULL;
 
    return semaphore;
 }
@@ -1797,11 +1758,11 @@ static bool __semaphoreGive(Semaphore* semaphore)
 {
    bool success = true;
 
-   if (semaphore->task != NULL)
+   if (semaphore->poll != NULL)
    {
-      semaphore->task->inactive.poll->data.success = true;
-      taskCancelTimeout(semaphore->task);
-      semaphore->task = semaphore->task->inactive.poll->next;
+      semaphore->poll->success = true;
+      taskCancelTimeout(semaphore->poll->task);
+      semaphore->poll = semaphore->poll->next;
    }
    else if (semaphore->count < semaphore->max)
    {
@@ -1852,91 +1813,71 @@ bool semaphoreGive(Semaphore* semaphore)
 /****************************************************************************
  *
  ****************************************************************************/
-static void semaphoreAddTask(Semaphore* semaphore, Task* task)
-{
-   Task* previous = NULL;
-   Task* ptr = semaphore->task;
-
-   while (ptr != NULL)
-   {
-      if (task->priority < ptr->priority)
-         break;
-
-      previous = ptr;
-      ptr = ptr->inactive.poll->next;
-   }
-
-   task->inactive.poll->next = ptr;
-
-   if (previous != NULL)
-      previous->inactive.poll->next = task;
-   else
-      semaphore->task = task;
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-static bool semaphoreDelTask(Semaphore* semaphore, Task* task)
-{
-   Task* previous = NULL;
-   Task* ptr = semaphore->task;
-
-   while (task != NULL)
-   {
-      if (ptr == task)
-      {
-         if (previous != NULL)
-            previous->inactive.poll->next = task->inactive.poll->next;
-         else
-            semaphore->task = task->inactive.poll->next;
-
-         return true;
-      }
-
-      previous = ptr;
-      ptr = ptr->inactive.poll->next;
-   }
-
-   return false;
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
 bool semaphoreTake(Semaphore* semaphore, unsigned long ticks)
 {
-   bool success = false;
+   TaskPoll poll;
+   poll.source = semaphore;
+   return semaphoreTake2(&poll, 1, ticks) != -1;
+}
+
+/****************************************************************************
+ *
+ ****************************************************************************/
+int semaphoreTake2(struct TaskPoll* poll, int size, unsigned long ticks)
+{
+   int i;
 
    kernelLock();
 
-   if (semaphore->count > 0)
+   for (i = 0; i < size; i++)
    {
-      semaphore->count--;
-      success = true;
+      Semaphore* semaphore = poll[i].source;
+
+      if (semaphore->count > 0)
+      {
+         semaphore->count--;
+         break;
+      }
    }
-   else if (ticks > 0)
+
+   if (i == size)
    {
-      TaskPoll poll;
+      i = -1;
 
-      poll.type.semaphore = semaphore;
-      poll.data.success = false;
+      if (ticks > 0)
+      {
+         current->inactive.poll = poll;
+         current->inactive.size = size;
 
-      current->inactive.poll = &poll;
+         for (int j = 0; j < size; j++)
+         {
+            poll[j].task = current;
+            poll[j].success = false;
 
-      semaphoreAddTask(semaphore, current);
-      taskSetTimeout(TASK_STATE_SEMAPHORE, ticks);
-      success = poll.data.success;
+            Semaphore* semaphore = poll[j].source;
+            taskPollAdd(&semaphore->poll, &poll[j]);
+         }
 
-      if (!success)
-         semaphoreDelTask(semaphore, current);
+         taskSetTimeout(TASK_STATE_SEMAPHORE, ticks);
 
-      current->inactive.poll = NULL;
+         for (int j = 0; j < size; j++)
+         {
+            Semaphore* semaphore = poll[j].source;
+
+            if (poll[j].success)
+               i = j;
+            else
+               taskPollDel(&semaphore->poll, current);
+         }
+
+         current->inactive.poll = NULL;
+         current->inactive.size = 0;
+      }
    }
 
    kernelUnlock();
 
-   return success;
+   return i;
 }
 #endif
 
@@ -1949,11 +1890,8 @@ Mutex* mutexCreate(const char* name)
 {
    Mutex* mutex = kmalloc(sizeof(Mutex));
 
+   memset(mutex, 0, sizeof(Mutex));
    mutex->name = name;
-   mutex->count = 0;
-   mutex->priority = 0;
-   mutex->owner = NULL;
-   mutex->task = NULL;
 
    return mutex;
 }
@@ -1968,58 +1906,6 @@ void mutexDestroy(Mutex* mutex)
    kfree(mutex);
 }
 #endif
-
-/****************************************************************************
- *
- ****************************************************************************/
-static void mutexAddTask(Mutex* mutex, Task* task)
-{
-   Task* previous = NULL;
-   Task* ptr = mutex->task;
-
-   while (ptr != NULL)
-   {
-      if (task->priority < ptr->priority)
-         break;
-
-      previous = ptr;
-      ptr = ptr->inactive.poll->next;
-   }
-
-   task->inactive.poll->next = ptr;
-
-   if (previous != NULL)
-      previous->inactive.poll->next = task;
-   else
-      mutex->task = task;
-}
-
-/****************************************************************************
- *
- ****************************************************************************/
-static bool mutexDelTask(Mutex* mutex, Task* task)
-{
-   Task* previous = NULL;
-   Task* ptr = mutex->task;
-
-   while (ptr != NULL)
-   {
-      if (ptr == task)
-      {
-         if (previous != NULL)
-            previous->inactive.poll->next = task->inactive.poll->next;
-         else
-            mutex->task = task->inactive.poll->next;
-
-         return true;
-      }
-
-      previous = ptr;
-      ptr = ptr->inactive.poll->next;
-   }
-
-   return false;
-}
 
 /****************************************************************************
  *
@@ -2048,10 +1934,12 @@ bool mutexLock(Mutex* mutex, unsigned long ticks)
       {
          TaskPoll poll;
 
-         poll.type.mutex = mutex;
-         poll.data.success = false;
+         poll.task = current;
+         poll.source = mutex;
+         poll.success = false;
 
          current->inactive.poll = &poll;
+         current->inactive.size = 1;
 
 #if TASK_PRIORITY_POLARITY
          if (current->priority > mutex->owner->priority)
@@ -2060,14 +1948,16 @@ bool mutexLock(Mutex* mutex, unsigned long ticks)
 #endif
             __taskPriority(mutex->owner, current->priority);
 
-         mutexAddTask(mutex, current);
+         taskPollAdd(&mutex->poll, &poll);
+
          taskSetTimeout(TASK_STATE_MUTEX, ticks);
-         success = poll.data.success;
+         success = poll.success;
 
          if (!success)
-            mutexDelTask(mutex, current);
+            taskPollDel(&mutex->poll, current);
 
          current->inactive.poll = NULL;
+         current->inactive.size = 0;
       }
    }
 
@@ -2088,17 +1978,17 @@ void mutexUnlock(Mutex* mutex)
 
    if (--mutex->count == 0)
    {
-      if (mutex->task != NULL)
+      if (mutex->poll != NULL)
       {
          __taskPriority(current, mutex->priority);
 
-         mutex->task->inactive.poll->data.success = true;
-         taskCancelTimeout(mutex->task);
-
          mutex->count = 1;
-         mutex->priority = mutex->task->priority;
-         mutex->owner = mutex->task;
-         mutex->task = mutex->task->inactive.poll->next;
+         mutex->priority = mutex->poll->task->priority;
+         mutex->owner = mutex->poll->task;
+         mutex->poll->success = true;
+         mutex->poll = mutex->poll->next;
+
+         taskCancelTimeout(mutex->owner);
 
          Task* task = taskNext(current->priority);
 
