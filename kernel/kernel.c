@@ -1149,10 +1149,13 @@ static void taskPrint(Task* task)
 
    if (inactive != NULL)
    {
+      int j = printf("%s", inactive);
+
       if (task->inactive.size > 1)
-         printf("%-17s,*", inactive);
-      else
-         printf("%-17s", inactive);
+         j += printf("*");
+
+      while (j++ < 17)
+         putchar(' ');
    }
    else
    {
