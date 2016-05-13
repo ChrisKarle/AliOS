@@ -184,6 +184,7 @@ typedef struct Task
 typedef struct TaskPoll
 {
    struct TaskPoll* next;
+
    Task* task;
    void* source;
    bool success;
@@ -595,6 +596,7 @@ void kernelUnlock();
 typedef struct Timer
 {
    struct Timer* next;
+
    volatile unsigned char flags;
    unsigned long timeout[2];
    Task* task;
@@ -608,7 +610,10 @@ typedef struct Timer
  * Function: timerCreate
  *    - Dynamically allocates a new timer.
  * Arguments:
- *    flags - see timer flags above
+ *    flags   - see timer flags above
+ *    timeout - timeout value in ticks
+ *    task    - pointer to task container
+ *              NULL if async timer
  * Returns:
  *    - pointer to initialized timer structure
  * Notes:
