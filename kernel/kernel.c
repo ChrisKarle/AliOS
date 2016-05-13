@@ -153,43 +153,42 @@ static Timer* timers;
 /****************************************************************************
  *
  ****************************************************************************/
-static void taskReaper(bool runOnce)
+static bool taskReaper()
 {
-   for (;;)
+   bool status = false;
+
+   kernelLock();
+
+   if (reap != NULL)
    {
-      kernelLock();
+      Task* task = reap;
+      reap = reap->next;
 
-      if (reap != NULL)
+      _taskExit(task);
+      kernelUnlock();
+
+      task->state = TASK_STATE_INIT;
+
+      if (task->flags & TASK_FLAG_RESTART)
       {
-         Task* task = reap;
-         reap = reap->next;
-
-         _taskExit(task);
-         kernelUnlock();
-
-         task->state = TASK_STATE_INIT;
-
-         if (task->flags & TASK_FLAG_RESTART)
-         {
-            task->flags &= ~TASK_FLAG_RESTART;
-            taskStart(task, task->start.fx, task->start.arg);
-         }
+         task->flags &= ~TASK_FLAG_RESTART;
+         taskStart(task, task->start.fx, task->start.arg);
+      }
 #ifdef kfree
-         else if (task->flags & TASK_FLAG_FREE)
-         {
-            kfree(task->stack.base);
-            kfree(task);
-         }
-#endif
-         if (runOnce)
-            break;
-      }
-      else
+      else if (task->flags & TASK_FLAG_FREE)
       {
-         kernelUnlock();
-         break;
+         kfree(task->stack.base);
+         kfree(task);
       }
+#endif
+      status = true;
    }
+   else
+   {
+      kernelUnlock();
+   }
+
+   return status;
 }
 
 #if TASK_REAPER
@@ -200,14 +199,14 @@ static void taskReaperFx(void* arg)
 {
    for (;;)
    {
+      while (taskReaper());
+
       kernelLock();
 
       if (reap == NULL)
          taskSetTimeout(TASK_STATE_SLEEP, -1);
 
       kernelUnlock();
-
-      taskReaper(false);
    }
 }
 #endif
@@ -400,7 +399,7 @@ static void taskSetTimeout(unsigned char state, unsigned long ticks)
 
          kernelUnlock();
 #if !TASK_REAPER
-         taskReaper(true);
+         taskReaper();
 #endif
          taskIdle();
          kernelLock();
@@ -644,7 +643,7 @@ void taskExit()
    if (reaper.state == TASK_STATE_SLEEP)
       taskCancelTimeout(&reaper);
 #else
-   taskReaper(false);
+   while (taskReaper());
    kernelLock();
 #endif
 
@@ -663,7 +662,7 @@ void taskExit()
 
          kernelUnlock();
 #if !TASK_REAPER
-         taskReaper(true);
+         taskReaper();
 #endif
          taskIdle();
          kernelLock();

@@ -227,7 +227,7 @@ Task* taskCreate(const char* name, signed char priority,
 bool _taskStart(Task* task, void (*fx)(void*), void* arg);
 
 /****************************************************************************
- * Function: _taskStart
+ * Function: taskStart
  *    - Starts a new task.
  * Arguments:
  *    task - task container to use
