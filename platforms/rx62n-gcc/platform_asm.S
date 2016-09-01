@@ -198,5 +198,5 @@ vectors:
  *
  ****************************************************************************/
    .section .fixed_vectors, "a"
-   .long __privExeException,  __accessException, 0, __undefExeException, 0,  \
+   .long __privExeException, __accessException, 0, __undefExeException, 0, \
          __floatingPtException, 0, 0, 0, 0, __nmi, _start

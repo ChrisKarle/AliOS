@@ -50,7 +50,7 @@ err_t sys_sem_new(sys_sem_t* sem, u8_t count)
    sem->name = "net";
    sem->count = count;
    sem->max = 1;
-   sem->task = NULL;
+   sem->poll = NULL;
 
    return ERR_OK;
 }
@@ -135,7 +135,7 @@ err_t sys_mbox_new(sys_mbox_t* mbox, int size)
    mbox->count = 0;
    mbox->index = 0;
    mbox->buffer = malloc(size * sizeof(void*));
-   mbox->task = NULL;
+   mbox->poll = NULL;
 
    return ERR_OK;
 }
@@ -251,7 +251,7 @@ err_t sys_mutex_new(sys_mutex_t* mutex)
    mutex->count = 0;
    mutex->priority = 0;
    mutex->owner = NULL;
-   mutex->task = NULL;
+   mutex->poll = NULL;
 
    return ERR_OK;
 }
